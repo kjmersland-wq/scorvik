@@ -1,0 +1,234 @@
+export type VideoFormat = "16:9" | "9:16" | "1:1" | "4:5";
+export type ScenePurpose = "Hook" | "Story" | "Product" | "Benefit" | "Proof" | "CTA";
+export type Confidence = "high" | "medium" | "low";
+
+export interface SourcedValue<T> {
+  value: T;
+  source: string;
+  confidence: Confidence;
+}
+
+export interface WebsiteSource {
+  submittedUrl: string;
+  finalUrl: string;
+  fetchedAt: string;
+  mode: "real" | "mock";
+}
+
+export interface StoryScene {
+  id: string;
+  order?: number;
+  purpose: ScenePurpose;
+  duration: number;
+  headline: string;
+  supportingText: string;
+  voiceover: string;
+  transition: string;
+  visual: string;
+  cta?: string;
+  musicCue?: string;
+  soundCue?: string;
+}
+
+export interface SiteAnalysis {
+  url: string;
+  title: string;
+  description: string;
+  brand: string;
+  colors: string[];
+  sellingPoints: string[];
+  image: string;
+  source?: WebsiteSource;
+  canonicalUrl?: string;
+  faviconUrl?: string;
+  openGraphImage?: string;
+  language?: string;
+  headings?: string[];
+  subheadings?: string[];
+  visibleText?: string;
+  images?: string[];
+  logoCandidates?: string[];
+  relevantLinks?: Array<{ label: string; url: string }>;
+  callsToAction?: string[];
+  proofPoints?: string[];
+  brandProfile?: BrandProfile;
+  fieldSources?: Record<string, SourcedValue<unknown>>;
+}
+
+export interface BrandProfile {
+  name: string;
+  category: "saas" | "ecommerce" | "restaurant" | "travel" | "service" | "content" | "other";
+  productOrService: string;
+  tone: string[];
+  colors: string[];
+  evidence: string[];
+  confidence: Confidence;
+}
+
+export interface CreativeBrief {
+  brand: string;
+  productOrService: string;
+  targetAudience: string[];
+  coreMessage: string;
+  keyBenefits: string[];
+  tone: string[];
+  visualStyle: string;
+  suggestedHook: string;
+  callToAction: string;
+  suggestedPacing: "measured" | "balanced" | "fast";
+  suggestedMusicDirection: string;
+  suggestedVoiceDirection: string;
+  recommendedPlatforms: string[];
+  evidence: string[];
+  confidence: Confidence;
+}
+
+export interface Storyboard {
+  scenes: StoryScene[];
+  totalDuration: number;
+  rationale: string;
+}
+
+export interface MusicTrack {
+  id: string;
+  title: string;
+  artist: string;
+  source: string;
+  sourceUrl: string;
+  audioUrl: string | null;
+  duration: number;
+  genre: string;
+  subgenre: string;
+  style: string[];
+  mood: string[];
+  energy: number;
+  tempoBpm: number;
+  instrumentation: string[];
+  era: string;
+  vocals: boolean;
+  instrumental: boolean;
+  useCases: string[];
+  brandFit: string[];
+  commercialUse: boolean;
+  allowedPlatforms: string[];
+  licenseType: string;
+  attributionRequired: boolean;
+  licenseUrl: string;
+  downloadedAt: string | null;
+  licenseCheckedAt: string | null;
+}
+
+export interface PlatformPreset {
+  id: string;
+  platform: string;
+  format: VideoFormat;
+  width: number;
+  height: number;
+  aspectRatio: string;
+  recommendedDuration: { min: number; max: number };
+  safeArea: { top: number; right: number; bottom: number; left: number };
+  textSafeArea: { top: number; right: number; bottom: number; left: number };
+  captionBehavior: "burn-in" | "platform" | "optional";
+}
+
+export interface AudioLayerSettings {
+  volume: number;
+  muted: boolean;
+  fadeInSeconds: number;
+  fadeOutSeconds: number;
+  startSeconds: number;
+}
+
+export interface AudioMix {
+  voice: AudioLayerSettings;
+  music: AudioLayerSettings;
+  sfx: AudioLayerSettings;
+  jingle: AudioLayerSettings;
+  duckMusicUnderVoice: boolean;
+}
+
+export interface VideoSettings {
+  format: VideoFormat;
+  duration: number;
+  language: string;
+  voice: string;
+  style: string;
+  music: string;
+  musicTrackId?: string | null;
+  userMood?: string[];
+  genrePreference?: string | null;
+  platformPresetIds?: string[];
+  audioMix?: AudioMix;
+}
+
+export interface VideoProject {
+  id: string;
+  title: string;
+  url: string;
+  createdAt: string;
+  analysis: SiteAnalysis;
+  scenes: StoryScene[];
+  settings: VideoSettings;
+  version: number;
+  creativeBrief?: CreativeBrief;
+  platformVersions?: Array<{ presetId: string; scenes: StoryScene[]; status: "draft" | "rendering" | "complete" }>;
+}
+
+export interface UrlIngestionProvider {
+  analyze(url: URL): Promise<SiteAnalysis>;
+}
+
+export type WebsiteIngestionService = UrlIngestionProvider;
+
+export interface CreativeBriefProvider {
+  create(analysis: SiteAnalysis): Promise<CreativeBrief>;
+}
+
+export interface StoryboardProvider {
+  build(analysis: SiteAnalysis): Promise<StoryScene[]>;
+}
+
+export interface VideoRenderProvider {
+  render(project: VideoProject): Promise<RenderJob>;
+}
+
+export interface AudioAsset {
+  id: string;
+  kind: "music" | "sfx" | "jingle" | "voice";
+  track?: MusicTrack;
+  url: string | null;
+  licenseUrl: string;
+  commercialUse: boolean;
+}
+
+export interface VoiceTrack {
+  id: string;
+  audioUrl: string | null;
+  language: string;
+  voice: string;
+  tone: string;
+  speed: number;
+}
+
+export interface SoundEffect extends AudioAsset {
+  kind: "sfx" | "jingle";
+  cue: string;
+}
+
+export interface RenderJob {
+  renderId: string;
+  status: "queued" | "processing" | "complete" | "failed";
+  mode: "mock" | "real";
+  engine: "demo" | "ffmpeg" | "external";
+  outputUrl?: string;
+}
+
+export interface VideoVersion {
+  id: string;
+  projectId: string;
+  label: string;
+  hook: string;
+  tone: string;
+  platformPresetIds: string[];
+  renderJobIds: string[];
+}

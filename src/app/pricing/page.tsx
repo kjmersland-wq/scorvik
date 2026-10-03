@@ -1,0 +1,5 @@
+import Link from "next/link";
+
+export default function PricingPage() {
+  return <div className="create-page info-page"><div className="page-heading"><div><span className="eyebrow">Pricing</span><h1>Start with the story.</h1><p>Explore the complete first-cut workflow in demo mode.</p></div></div><section className="panel pricing-panel"><div><span className="eyebrow">EARLY ACCESS / DEMO</span><h2>One website. One story. Your first cut.</h2><p>Experiment with formats, scene direction and voice settings. No account or provider credentials required.</p><div className="pricing-line"><b>$0</b><span>for this local demo</span></div><div className="tag-list"><span className="tag">Unlimited storyboard edits</span><span className="tag">Four video formats</span><span className="tag">Project library</span></div></div><Link href="/create" className="button">Create a video <span aria-hidden="true">→</span></Link></section><p className="field-caption pricing-footnote">Paid plans will be introduced when real rendering providers are connected.</p></div>;
+}
