@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { signIn, type SignInState } from "@/app/auth-actions";
 
 const initialState: SignInState = {};
@@ -18,6 +19,7 @@ export function PreviewLoginForm() {
         <span>Password</span>
         <input name="password" type="password" autoComplete="current-password" required maxLength={1024} />
       </label>
+      <Link className="preview-login-forgot" href="/forgot-password">Forgot your password?</Link>
       {state.error && <p className="preview-login-error" role="alert">{state.error}</p>}
       <button className="button" type="submit" disabled={pending}>
         {pending ? "Signing you in…" : "Sign in →"}

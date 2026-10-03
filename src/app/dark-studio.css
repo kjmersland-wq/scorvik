@@ -273,6 +273,22 @@ body::before {
 .preview-login-form .button { width: 100%; margin-top: 3px; font-size: 11px; }
 .preview-login-form .button:disabled { cursor: wait; opacity: .72; }
 .preview-login-error { margin: -4px 0 0; color: #ff9a83; font-size: 12px; }
+.preview-login-forgot, .preview-login-back {
+  justify-self: start;
+  color: #b9aaa0;
+  font-size: 11px;
+  transition: color .18s ease;
+}
+.preview-login-forgot { margin-top: -8px; }
+.preview-login-forgot:hover, .preview-login-back:hover, .preview-dev-reset a:hover { color: #ff9575; }
+.preview-login-back { display: inline-block; margin-top: 21px; }
+.preview-login-notice, .preview-reset-success p { margin: 0; color: #b9aaa0; font-size: 12px; line-height: 1.6; }
+.preview-password-hint { margin: -5px 0 0; color: #958980; font-size: 11px; }
+.preview-dev-reset { display: grid; gap: 6px; padding: 12px; border: 1px solid #373130; background: #0a090a; }
+.preview-dev-reset a { color: #f07858; font-size: 12px; transition: color .18s ease; overflow-wrap: anywhere; }
+.preview-dev-reset small { color: #958980; font-size: 10px; }
+.preview-reset-success { display: grid; gap: 17px; }
+.preview-reset-success .button { justify-self: start; }
 .header-sign-out {
   padding: 8px 0 8px 4px;
   border: 0;

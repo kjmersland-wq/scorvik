@@ -31,8 +31,9 @@ test("preview credentials compare without accepting incomplete configuration", a
 
 test("signed sessions expire and reject tampering or a different secret", async () => {
   const now = 1_700_000_000_000;
-  const token = await createPreviewSessionToken(secret, now);
+  const token = await createPreviewSessionToken(secret, 0, now);
   assert.equal(await isPreviewSessionTokenValid(token, secret, now), true);
+  assert.equal(await isPreviewSessionTokenValid(await createPreviewSessionToken(secret, 4, now), secret, now), true);
   assert.equal(await isPreviewSessionTokenValid(token, secret, now + PREVIEW_SESSION_MAX_AGE_SECONDS * 1000), false);
   assert.equal(await isPreviewSessionTokenValid(`${token}x`, secret, now), false);
   assert.equal(await isPreviewSessionTokenValid(token, randomBytes(32).toString("base64url"), now), false);
@@ -56,7 +57,7 @@ test("all application pages and API routes require authentication except login a
   for (const path of ["/", "/create", "/projects", "/projects/example-id", "/pricing", "/how-it-works", "/api", "/api/website/analyze", "/anything-else"]) {
     assert.equal(requiresPreviewAuthentication(path), true, path);
   }
-  for (const path of ["/login", "/login/", "/_next/static/chunks/app.js", "/_next/image/logo.png", "/favicon.ico", "/images/logo.svg"]) {
+  for (const path of ["/login", "/login/", "/forgot-password", "/reset-password", "/_next/static/chunks/app.js", "/_next/image/logo.png", "/favicon.ico", "/images/logo.svg"]) {
     assert.equal(requiresPreviewAuthentication(path), false, path);
   }
 });
