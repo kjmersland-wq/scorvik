@@ -15,7 +15,7 @@ export class WebsiteIngestionService {
     const fetched = await fetchWebsiteHtml(input, this.fetchOptions);
     const analysis = parseWebsiteHtml(fetched.body, fetched.url);
     if ((analysis.visibleText ?? "").trim().length < 30 && !analysis.headings?.length && !analysis.description) {
-      throw new WebsiteIngestionError("EMPTY_PAGE", "This webpage doesn't contain enough readable content.");
+      throw new WebsiteIngestionError("EMPTY_PAGE", "We couldn't find enough to work with on this page. Try another one.");
     }
     const source: WebsiteSource = {
       submittedUrl: input,

@@ -23,7 +23,7 @@ test("taxonomy covers required genre breadth, subgenres and mood discovery", () 
   for (const genre of ["Blues", "Jazz", "Rock", "Electronic", "Acoustic / Folk", "Cinematic", "Soul / R&B", "World"]) assert.ok(musicTaxonomy.some((entry) => entry.genre === genre));
   assert.ok(findTaxonomyEntry("Blues")?.subgenres.includes("Chicago Blues"));
   assert.ok(findTaxonomyEntry("Blues")?.instrumentation.includes("Harmonica"));
-  assert.ok(moodChoices.includes("Sophisticated"));
+  assert.deepEqual(moodChoices, ["Warm", "Bold", "Calm", "Energetic", "Cinematic", "Playful", "Elegant", "Emotional", "Modern", "Nostalgic", "Adventurous", "Authentic"]);
 });
 
 test("music ranking is deterministic, brand-sensitive and respects explicit genre", () => {
@@ -32,7 +32,7 @@ test("music ranking is deterministic, brand-sensitive and respects explicit genr
   const recommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] });
   assert.equal(recommendations[0]?.track.id, "track-modern-horizon");
   assert.deepEqual(recommendations.map((item) => item.track.id), recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] }).map((item) => item.track.id));
-  assert.ok(recommendations.every((item) => item.licenseWarning.includes("Demo metadata")));
+  assert.ok(recommendations.every((item) => item.licenseWarning.includes("Sample details only")));
   const bluesOnly = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", genrePreference: "Blues" });
   assert.ok(bluesOnly.length > 0);
   assert.ok(bluesOnly.every((item) => item.track.genre === "Blues"));

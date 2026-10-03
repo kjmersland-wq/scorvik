@@ -1,28 +1,19 @@
 import type { Metadata } from "next";
+import { hasValidPreviewSession } from "@/lib/auth/session";
 import { AppHeader } from "@/components/app-header";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  applicationName: "SCORVIK",
-  title: "SCORVIK | From website to finished video",
-  description: "Turn any website into a polished marketing video. SCORVIK finds the story already there and builds the scenes for you.",
-  openGraph: {
-    title: "SCORVIK | From website to finished video",
-    description: "Turn any website into a polished marketing video. SCORVIK finds the story already there and builds the scenes for you.",
-    siteName: "SCORVIK",
-    type: "website",
-  },
-  twitter: {
-    card: "summary",
-    title: "SCORVIK | From website to finished video",
-    description: "Turn any website into a polished marketing video. SCORVIK finds the story already there and builds the scenes for you.",
-  },
+  title: "Private preview",
+  description: "Sign in to continue.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const authenticated = await hasValidPreviewSession();
+
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body><AppHeader /><main className="app-main">{children}</main></body>
+      <body>{authenticated && <AppHeader />}<main className={authenticated ? "app-main" : "login-main"}>{children}</main></body>
     </html>
   );
 }

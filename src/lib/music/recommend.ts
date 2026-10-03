@@ -46,23 +46,23 @@ export function recommendMusic(input: MusicRecommendationInput, catalog: MusicTr
       const moodTargets = input.userMoods?.length ? input.userMoods : input.brief.tone;
       const matchedMoods = moodTargets.filter((mood) => track.mood.some((item) => item.toLowerCase() === mood.toLowerCase()));
       score += matchedMoods.length * 4;
-      if (matchedMoods.length) matchReasons.push(`${matchedMoods[0]} mood`);
+      if (matchedMoods.length) matchReasons.push(`A ${matchedMoods[0].toLowerCase()} feel`);
       const genreMatch = input.genrePreference ? 12 : inferred.includes(track.genre) ? 7 : 0;
       score += genreMatch;
-      if (genreMatch) matchReasons.push(input.genrePreference ? "Your genre" : "Brand direction");
-      if (track.brandFit.includes(category)) { score += 6; matchReasons.push("Brand fit"); }
+      if (genreMatch) matchReasons.push(input.genrePreference ? "Your pick" : "Fits your brand");
+      if (track.brandFit.includes(category)) { score += 6; matchReasons.push("A natural fit"); }
       if (input.style && track.style.some((style) => style.toLowerCase().includes(input.style!.toLowerCase()))) score += 2;
       const tempoMidpoint = musicTaxonomy.find((entry) => entry.genre === track.genre)?.tempoRange.reduce((sum, value) => sum + value, 0) ?? 180;
       if (track.tempoBpm >= tempoMidpoint / 2 - 12 && track.tempoBpm <= tempoMidpoint / 2 + 12) score += 2;
       const durationFit = 1 - Math.min(Math.abs(track.duration - input.duration) / Math.max(input.duration, 1), 1);
       score += Math.round(durationFit * 5);
-      if (durationFit > 0.8) matchReasons.push("Good duration fit");
+      if (durationFit > 0.8) matchReasons.push("Fits your film");
       if (track.allowedPlatforms.includes(input.platform)) score += 2;
       return {
         track,
         score,
         matchReasons,
-        licenseWarning: track.commercialUse && track.licenseUrl ? "License metadata supplied; verify the grant before production." : "Demo metadata only. No audio file or commercial-use license is supplied.",
+        licenseWarning: track.commercialUse && track.licenseUrl ? "Check that this permission covers your use before adding the track." : "Sample details only. There is no audio file or permission to use the track.",
       };
     })
     .sort((left, right) => right.score - left.score || left.track.id.localeCompare(right.track.id));

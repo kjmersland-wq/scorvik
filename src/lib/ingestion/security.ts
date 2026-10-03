@@ -81,24 +81,24 @@ export function isPublicAddress(address: string): boolean {
 export function normalizeWebsiteUrl(input: string): URL {
   const trimmed = input.trim();
   if (!trimmed || trimmed.length > 2048 || /[\u0000-\u0020\\]/.test(trimmed)) {
-    throw new WebsiteIngestionError("INVALID_URL", "Enter a valid public website URL.");
+    throw new WebsiteIngestionError("INVALID_URL", "That link doesn't seem to work yet. Check it and try again.");
   }
   let url: URL;
   try {
     url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
   } catch {
-    throw new WebsiteIngestionError("INVALID_URL", "Enter a valid public website URL.");
+    throw new WebsiteIngestionError("INVALID_URL", "That link doesn't seem to work yet. Check it and try again.");
   }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || !url.hostname) {
-    throw new WebsiteIngestionError("INVALID_URL", "Only public HTTP and HTTPS pages can be analyzed.");
+    throw new WebsiteIngestionError("INVALID_URL", "Please use a website link that starts with http:// or https://.");
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
   const family = isIP(hostname);
   if (!family && (!hostname.includes(".") || forbiddenHostnameSuffixes.some((suffix) => hostname.endsWith(suffix)))) {
-    throw new WebsiteIngestionError("BLOCKED_URL", "This address is not publicly accessible.");
+    throw new WebsiteIngestionError("BLOCKED_URL", "We can only take a look at public websites. Try a public link instead.");
   }
   if (family && !isPublicAddress(hostname)) {
-    throw new WebsiteIngestionError("BLOCKED_URL", "This address is not publicly accessible.");
+    throw new WebsiteIngestionError("BLOCKED_URL", "We can only take a look at public websites. Try a public link instead.");
   }
   url.hash = "";
   return url;
@@ -110,17 +110,17 @@ export async function resolvePublicAddress(hostname: string, resolver: AddressRe
 }) {
   const plainHostname = hostname.replace(/^\[|\]$/g, "");
   if (isIP(plainHostname)) {
-    if (!isPublicAddress(plainHostname)) throw new WebsiteIngestionError("BLOCKED_URL", "This address is not publicly accessible.");
+    if (!isPublicAddress(plainHostname)) throw new WebsiteIngestionError("BLOCKED_URL", "We can only take a look at public websites. Try a public link instead.");
     return { address: plainHostname, family: isIP(plainHostname) as 4 | 6 };
   }
   let addresses: ResolvedAddress[];
   try {
     addresses = await resolver(plainHostname);
   } catch {
-    throw new WebsiteIngestionError("DNS_FAILED", "We couldn't find this website.");
+    throw new WebsiteIngestionError("DNS_FAILED", "We couldn't find that website. Check the address and try again.");
   }
   if (!addresses.length || addresses.some(({ address }) => !isPublicAddress(address))) {
-    throw new WebsiteIngestionError("BLOCKED_URL", "This address is not publicly accessible.");
+    throw new WebsiteIngestionError("BLOCKED_URL", "We can only take a look at public websites. Try a public link instead.");
   }
   return addresses[0];
 }

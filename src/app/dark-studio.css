@@ -236,6 +236,53 @@ body::before {
 .footer { border-top: 1px solid #302b2a; color: #a59b93; }
 
 .app-main { min-height: calc(100vh - 74px); }
+.login-main {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+}
+.preview-login {
+  width: min(100%, 390px);
+  padding: 34px;
+  border: 1px solid #373130;
+  border-radius: 2px;
+  background: #101012;
+}
+.preview-login > .eyebrow { color: #f07858; }
+.preview-login h1 {
+  margin: 18px 0 8px;
+  color: #f0e9e2;
+  font: 400 38px/1.05 var(--font-editorial);
+}
+.preview-login > p { margin: 0 0 25px; color: #a79d95; font-size: 13px; }
+.preview-login-form { display: grid; gap: 16px; }
+.preview-login-form label { display: grid; gap: 8px; color: #b7aca4; font: 10px var(--font-mono); }
+.preview-login-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid #403936;
+  border-radius: 2px;
+  background: #0a090a;
+  color: #eee7df;
+  font: 13px var(--font-body);
+  transition: border-color .18s ease, background .18s ease;
+}
+.preview-login-form input:focus { border-color: #c46248; background: #100d0d; outline: 0; }
+.preview-login-form .button { width: 100%; margin-top: 3px; font-size: 11px; }
+.preview-login-form .button:disabled { cursor: wait; opacity: .72; }
+.preview-login-error { margin: -4px 0 0; color: #ff9a83; font-size: 12px; }
+.header-sign-out {
+  padding: 8px 0 8px 4px;
+  border: 0;
+  background: transparent;
+  color: #a79d95;
+  cursor: pointer;
+  font-size: 10px;
+  transition: color .18s ease;
+}
+.header-sign-out:hover { color: #ff9575; }
 .create-page { max-width: 1440px; padding: 52px clamp(18px, 5vw, 70px) 92px; }
 .page-heading h1 { color: #f0e9e2; font: 400 clamp(40px, 5.1vw, 64px)/.98 var(--font-editorial); }
 .page-heading h1 { font-family: var(--font-editorial); font-weight: 400; }
@@ -386,6 +433,7 @@ body::before {
   .site-header .header-actions .header-edition { display: none !important; }
   .header-actions { gap: 0; }
   .header-actions .button { min-height: 37px; padding-inline: 11px; font-size: 8px; }
+  .header-sign-out { padding-left: 8px; font-size: 9px; }
   .hero { display: block; min-height: 0; padding: 52px 18px 42px; }
   .hero::before { height: 100%; background: linear-gradient(180deg, #0d0b0b, #080809 70%); }
   .hero h1 { margin: 22px 0 18px; font-size: clamp(60px, 16vw, 84px); line-height: .87; }
@@ -413,6 +461,7 @@ body::before {
   .closing { align-items: flex-start; flex-direction: column; }
   .footer { gap: 14px; flex-wrap: wrap; }
   .create-page { padding: 37px 15px 68px; }
+  .preview-login { padding: 27px 22px; }
   .page-heading { gap: 17px; align-items: flex-start; flex-direction: column; }
   .page-heading h1 { font-size: clamp(42px, 12vw, 56px); }
   .stepper button { gap: 4px; font-size: 0; justify-content: center; }

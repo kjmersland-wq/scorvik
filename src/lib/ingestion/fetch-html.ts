@@ -47,7 +47,7 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
       }
       const declaredLength = Number(headers["content-length"]);
       if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-        incoming.destroy(new WebsiteIngestionError("RESPONSE_TOO_LARGE", "The page is too large to analyze."));
+        incoming.destroy(new WebsiteIngestionError("RESPONSE_TOO_LARGE", "This page has a lot to take in. Try a simpler page, like your homepage."));
         return;
       }
       const chunks: Buffer[] = [];
@@ -56,7 +56,7 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         received += buffer.length;
         if (received > maxBytes) {
-          incoming.destroy(new WebsiteIngestionError("RESPONSE_TOO_LARGE", "The page is too large to analyze."));
+          incoming.destroy(new WebsiteIngestionError("RESPONSE_TOO_LARGE", "This page has a lot to take in. Try a simpler page, like your homepage."));
           return;
         }
         chunks.push(buffer);
@@ -64,10 +64,10 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
       incoming.on("end", () => resolve({ status, headers, body: Buffer.concat(chunks).toString("utf8") }));
       incoming.on("error", reject);
     });
-    outgoing.setTimeout(timeoutMs, () => outgoing.destroy(new WebsiteIngestionError("TIMEOUT", "The website took too long to respond.")));
+    outgoing.setTimeout(timeoutMs, () => outgoing.destroy(new WebsiteIngestionError("TIMEOUT", "That page is taking a little while to respond. Try again in a moment.")));
     outgoing.on("error", (error) => {
       if (error instanceof WebsiteIngestionError) reject(error);
-      else reject(new WebsiteIngestionError("UNAVAILABLE", "We couldn't access this website."));
+      else reject(new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again."));
     });
     outgoing.end();
   });
@@ -85,32 +85,32 @@ export async function fetchWebsiteHtml(input: string, options: FetchHtmlOptions 
     const address = await resolvePublicAddress(url.hostname, resolver);
     const response = await request(url, address, timeoutMs, maxBytes);
     if (Buffer.byteLength(response.body, "utf8") > maxBytes) {
-      throw new WebsiteIngestionError("RESPONSE_TOO_LARGE", "The page is too large to analyze.");
+      throw new WebsiteIngestionError("RESPONSE_TOO_LARGE", "This page has a lot to take in. Try a simpler page, like your homepage.");
     }
     if (response.status >= 300 && response.status < 400 && response.headers.location) {
-      if (redirects === maxRedirects) throw new WebsiteIngestionError("UNAVAILABLE", "This website redirected too many times.");
+      if (redirects === maxRedirects) throw new WebsiteIngestionError("UNAVAILABLE", "This page took a few too many turns. Try the website's homepage instead.");
       let next: URL;
       try {
         const location = Array.isArray(response.headers.location) ? response.headers.location[0] : response.headers.location;
         next = normalizeWebsiteUrl(new URL(location, url).href);
       } catch (error) {
         if (error instanceof WebsiteIngestionError) throw error;
-        throw new WebsiteIngestionError("UNAVAILABLE", "This website redirected to an invalid address.");
+        throw new WebsiteIngestionError("UNAVAILABLE", "We couldn't follow that link. Try the website's homepage instead.");
       }
       if (url.protocol === "https:" && next.protocol !== "https:") {
-        throw new WebsiteIngestionError("BLOCKED_URL", "This website redirected to an insecure address.");
+        throw new WebsiteIngestionError("BLOCKED_URL", "That link didn't feel safe to follow. Try the website's homepage instead.");
       }
       url = next;
       continue;
     }
-    if (response.status === 401 || response.status === 403) throw new WebsiteIngestionError("ACCESS_DENIED", "This website doesn't allow public access.");
-    if (response.status < 200 || response.status >= 300) throw new WebsiteIngestionError("UNAVAILABLE", "We couldn't access this website.");
+    if (response.status === 401 || response.status === 403) throw new WebsiteIngestionError("ACCESS_DENIED", "This site isn't open to visitors right now. Try another public page.");
+    if (response.status < 200 || response.status >= 300) throw new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again.");
     const contentType = String(response.headers["content-type"] ?? "").toLowerCase();
     if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
-      throw new WebsiteIngestionError("UNSUPPORTED_CONTENT", "This address doesn't point to a supported webpage.");
+      throw new WebsiteIngestionError("UNSUPPORTED_CONTENT", "That link doesn't lead to a page we can read. Try another one.");
     }
-    if (!response.body.trim()) throw new WebsiteIngestionError("EMPTY_PAGE", "This webpage doesn't contain readable content.");
+    if (!response.body.trim()) throw new WebsiteIngestionError("EMPTY_PAGE", "We couldn't find enough to work with on this page. Try another one.");
     return { ...response, url: url.href };
   }
-  throw new WebsiteIngestionError("UNAVAILABLE", "We couldn't access this website.");
+  throw new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again.");
 }

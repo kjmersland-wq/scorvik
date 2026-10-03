@@ -20,7 +20,7 @@ export const musicTaxonomy: MusicTaxonomyEntry[] = [
   { genre: "Orchestral", subgenres: ["Chamber", "Modern Classical", "Piano Solo", "String Ensemble", "Baroque-inspired"], styles: ["Refined", "Minimal", "Expressive"], moods: ["Elegant", "Emotional", "Sophisticated", "Inspirational"], energies: ["Slow", "Medium"], tempoRange: [45, 120], instrumentation: ["Piano", "Strings", "Cello", "Woodwinds"] },
 ];
 
-export const moodChoices = ["Premium", "Elegant", "Energetic", "Warm", "Emotional", "Powerful", "Modern", "Relaxed", "Playful", "Trustworthy", "Cinematic", "Nostalgic", "Adventurous", "Authentic", "Inspirational", "Sophisticated", "Fun", "Dramatic"];
+export const moodChoices = ["Warm", "Bold", "Calm", "Energetic", "Cinematic", "Playful", "Elegant", "Emotional", "Modern", "Nostalgic", "Adventurous", "Authentic"];
 
 export function findTaxonomyEntry(genre: string, subgenre?: string): MusicTaxonomyEntry | undefined {
   return musicTaxonomy.find((entry) => entry.genre === genre && (!subgenre || entry.subgenres.includes(subgenre)));

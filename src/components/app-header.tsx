@@ -1,21 +1,23 @@
 import Link from "next/link";
+import { signOut } from "@/app/auth-actions";
 
 export function AppHeader() {
   return (
     <header className="site-header">
       <Link className="brand" href="/" aria-label="SCORVIK home">
         <span className="brand-mark" aria-hidden="true"><i /></span>
-        <span className="brand-wordmark">SCOR<span>VIK</span><small>CREATIVE VIDEO ENGINE</small></span>
+        <span className="brand-wordmark">SCOR<span>VIK</span><small>YOUR CREATIVE STUDIO</small></span>
       </Link>
       <nav className="header-nav" aria-label="Main navigation">
-        <Link href="/create">Create</Link>
-        <Link href="/projects">Projects</Link>
-        <Link href="/create#music">Music</Link>
-        <Link href="/pricing">Pricing</Link>
+        <Link href="/create">Make a film</Link>
+        <Link href="/projects">My films</Link>
+        <Link href="/create#music">Sound</Link>
+        <Link href="/pricing">Plans</Link>
       </nav>
       <div className="header-actions">
-        <span className="header-edition">STUDIO&nbsp; / &nbsp;01</span>
-        <Link className="button button-small" href="/create">NEW PRODUCTION <span aria-hidden="true">↗</span></Link>
+        <span className="header-edition">YOUR STUDIO</span>
+        <Link className="button button-small" href="/create">START WITH YOUR WEBSITE <span aria-hidden="true">↗</span></Link>
+        <form action={signOut}><button className="header-sign-out" type="submit">Sign out</button></form>
       </div>
     </header>
   );

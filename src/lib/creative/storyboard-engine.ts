@@ -7,13 +7,13 @@ interface ScenePlan {
 }
 
 const scenePlans: Record<string, ScenePlan[]> = {
-  saas: [{ purpose: "Hook", label: "The promise" }, { purpose: "Product", label: "The product" }, { purpose: "Benefit", label: "How it helps" }, { purpose: "CTA", label: "Next step" }],
-  ecommerce: [{ purpose: "Hook", label: "The collection" }, { purpose: "Product", label: "The product" }, { purpose: "Benefit", label: "The details" }, { purpose: "Proof", label: "Reasons to choose" }, { purpose: "CTA", label: "Explore" }],
-  restaurant: [{ purpose: "Hook", label: "The invitation" }, { purpose: "Story", label: "The experience" }, { purpose: "Product", label: "The menu" }, { purpose: "Benefit", label: "The atmosphere" }, { purpose: "CTA", label: "Visit" }],
-  travel: [{ purpose: "Hook", label: "The destination" }, { purpose: "Story", label: "The experience" }, { purpose: "Benefit", label: "The highlights" }, { purpose: "Product", label: "Plan your stay" }, { purpose: "CTA", label: "Explore" }],
-  service: [{ purpose: "Hook", label: "The challenge" }, { purpose: "Story", label: "The approach" }, { purpose: "Benefit", label: "The value" }, { purpose: "Proof", label: "The proof" }, { purpose: "CTA", label: "Start a conversation" }],
-  content: [{ purpose: "Hook", label: "The idea" }, { purpose: "Story", label: "What you will find" }, { purpose: "Benefit", label: "Why it matters" }, { purpose: "CTA", label: "Join in" }],
-  other: [{ purpose: "Hook", label: "The introduction" }, { purpose: "Story", label: "The story" }, { purpose: "Product", label: "What is offered" }, { purpose: "CTA", label: "Explore" }],
+  saas: [{ purpose: "Hook", label: "What becomes easier" }, { purpose: "Product", label: "A closer look" }, { purpose: "Benefit", label: "How it helps" }, { purpose: "CTA", label: "Your next step" }],
+  ecommerce: [{ purpose: "Hook", label: "Find something you love" }, { purpose: "Product", label: "Made with care" }, { purpose: "Benefit", label: "Little things that matter" }, { purpose: "Proof", label: "Why people come back" }, { purpose: "CTA", label: "Take a look" }],
+  restaurant: [{ purpose: "Hook", label: "Come on in" }, { purpose: "Story", label: "The feeling of being here" }, { purpose: "Product", label: "Made for the table" }, { purpose: "Benefit", label: "A place to settle in" }, { purpose: "CTA", label: "Plan a visit" }],
+  travel: [{ purpose: "Hook", label: "Somewhere to go" }, { purpose: "Story", label: "What it feels like" }, { purpose: "Benefit", label: "Little moments to remember" }, { purpose: "Product", label: "Make it your stay" }, { purpose: "CTA", label: "Start exploring" }],
+  service: [{ purpose: "Hook", label: "A familiar challenge" }, { purpose: "Story", label: "A thoughtful way through" }, { purpose: "Benefit", label: "What gets easier" }, { purpose: "Proof", label: "Stories from people like you" }, { purpose: "CTA", label: "Let's talk" }],
+  content: [{ purpose: "Hook", label: "An idea worth sharing" }, { purpose: "Story", label: "What you'll find" }, { purpose: "Benefit", label: "Why it matters to you" }, { purpose: "CTA", label: "Come along" }],
+  other: [{ purpose: "Hook", label: "A good place to start" }, { purpose: "Story", label: "What makes it yours" }, { purpose: "Product", label: "A closer look" }, { purpose: "CTA", label: "Take a look" }],
 };
 
 function chooseEvidence(plan: ScenePlan, index: number, analysis: SiteAnalysis, brief: CreativeBrief): string {
