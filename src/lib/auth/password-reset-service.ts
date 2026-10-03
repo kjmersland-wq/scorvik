@@ -1,5 +1,5 @@
 import type { PasswordResetEmailProvider } from "./email-provider.ts";
-import type { AuthStore } from "./d1-store.ts";
+import type { AuthStore } from "./auth-store.ts";
 import { hashPassword } from "./password-hash.ts";
 import { previewEmailMatches, type PreviewEnvironment } from "./session-core.ts";
 import { createResetToken, hashRateLimitBucket, hashResetToken } from "./reset-token.ts";
@@ -17,7 +17,7 @@ export interface PasswordResetRequestOptions {
   email: string;
   clientAddress: string;
   origin: string;
-  store: AuthStore;
+  store: AuthStore | null;
   emailProvider: PasswordResetEmailProvider | null;
   dispatchEmail?: (provider: PasswordResetEmailProvider, message: { email: string; resetUrl: string; expiresAt: number } | null) => Promise<void>;
   environment?: PreviewEnvironment;
@@ -28,7 +28,7 @@ export async function requestPreviewPasswordReset(options: PasswordResetRequestO
   const environment = options.environment ?? process.env;
   const now = options.now ?? Date.now();
   const secret = environment.SCORVIK_AUTH_SECRET;
-  if (!secret || !environment.SCORVIK_PREVIEW_EMAIL) return { message: PASSWORD_RESET_REQUEST_MESSAGE };
+  if (!secret || !environment.SCORVIK_PREVIEW_EMAIL || !options.store) return { message: PASSWORD_RESET_REQUEST_MESSAGE };
 
   const email = options.email.trim().toLowerCase();
   const bucket = await hashRateLimitBucket(secret, "password-reset", `${email}:${options.clientAddress}`);
@@ -47,7 +47,8 @@ export async function requestPreviewPasswordReset(options: PasswordResetRequestO
 
   const { token, tokenHash } = await createResetToken();
   const expiresAt = now + PASSWORD_RESET_TOKEN_TTL_MS;
-  await options.store.createResetToken(crypto.randomUUID(), email, tokenHash, now, expiresAt);
+  const currentCredential = await options.store.getCredential(email);
+  await options.store.createResetToken(crypto.randomUUID(), email, tokenHash, currentCredential?.session_version ?? 0, now, expiresAt);
   const resetUrl = new URL(`/reset-password?token=${encodeURIComponent(token)}`, options.origin).toString();
 
   if (options.emailProvider) {
@@ -71,7 +72,7 @@ export interface ApplyPasswordResetOptions {
   password: string;
   confirmation: string;
   clientAddress: string;
-  store: AuthStore;
+  store: AuthStore | null;
   email: string;
   environment?: PreviewEnvironment;
   now?: number;
@@ -81,7 +82,7 @@ export async function applyPreviewPasswordReset(options: ApplyPasswordResetOptio
   const environment = options.environment ?? process.env;
   const now = options.now ?? Date.now();
   const secret = environment.SCORVIK_AUTH_SECRET;
-  if (!secret || !options.email || options.password !== options.confirmation) return false;
+  if (!secret || !options.email || !options.store || options.password !== options.confirmation) return false;
   if (options.password.length < 12 || new TextEncoder().encode(options.password).byteLength > 1024) return false;
   if (!/^[A-Za-z0-9_-]{43}$/.test(options.token)) return false;
 

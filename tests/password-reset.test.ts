@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { authenticatePreviewUser, isPreviewSessionCurrent } from "../src/lib/auth/auth-service.ts";
-import type { AuthCredential, AuthStore } from "../src/lib/auth/d1-store.ts";
+import type { AuthCredential, AuthStore } from "../src/lib/auth/auth-store.ts";
 import type { PasswordResetEmail, PasswordResetEmailProvider } from "../src/lib/auth/email-provider.ts";
 import { MemoryAuthStore } from "../src/lib/auth/memory-store.ts";
 import { hashPassword } from "../src/lib/auth/password-hash.ts";
@@ -34,9 +34,9 @@ class RecordingStore implements AuthStore {
     return this.memory.consumeRateLimit(bucket, now, windowMs, maxAttempts);
   }
 
-  async createResetToken(id: string, emailAddress: string, tokenHash: string, createdAt: number, expiresAt: number): Promise<void> {
+  async createResetToken(id: string, emailAddress: string, tokenHash: string, sessionVersion: number, createdAt: number, expiresAt: number): Promise<void> {
     this.lastTokenHash = tokenHash;
-    await this.memory.createResetToken(id, emailAddress, tokenHash, createdAt, expiresAt);
+    await this.memory.createResetToken(id, emailAddress, tokenHash, sessionVersion, createdAt, expiresAt);
   }
 
   isResetTokenUsable(emailAddress: string, tokenHash: string, now: number): Promise<boolean> {
@@ -45,6 +45,10 @@ class RecordingStore implements AuthStore {
 
   consumeResetToken(emailAddress: string, tokenHash: string, passwordHash: string, now: number): Promise<boolean> {
     return this.memory.consumeResetToken(emailAddress, tokenHash, passwordHash, now);
+  }
+
+  updatePassword(emailAddress: string, passwordHash: string): Promise<number | null> {
+    return this.memory.updatePassword(emailAddress, passwordHash);
   }
 }
 
@@ -62,13 +66,15 @@ function resetRequest(store: AuthStore, requestedEmail: string, now: number, nod
 
 test("bootstrap login works until a D1 password hash exists; then the hash takes precedence", async () => {
   const store = new MemoryAuthStore();
+  assert.deepEqual(await authenticatePreviewUser(email, bootstrapPassword, null, environment), { email, sessionVersion: 0 });
+  assert.equal(await authenticatePreviewUser(email, "incorrect-bootstrap", null, environment), null);
   const bootstrap = await authenticatePreviewUser(email, bootstrapPassword, store, environment);
   assert.deepEqual(bootstrap, { email, sessionVersion: 0 });
   assert.equal(await authenticatePreviewUser(email, "wrong-password-value", store, environment), null);
 
   const { token, tokenHash } = await createResetToken();
   const now = Date.now();
-  await store.createResetToken("seed-credential", email, tokenHash, now, now + PASSWORD_RESET_TOKEN_TTL_MS);
+  await store.createResetToken("seed-credential", email, tokenHash, 0, now, now + PASSWORD_RESET_TOKEN_TTL_MS);
   const passwordHash = await hashPassword(newPassword);
   await store.consumeResetToken(email, await hashResetToken(token), passwordHash, now + 1);
   const stored = await store.getCredential(email);

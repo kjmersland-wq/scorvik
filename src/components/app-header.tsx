@@ -13,6 +13,7 @@ export function AppHeader() {
         <Link href="/projects">My films</Link>
         <Link href="/create#music">Sound</Link>
         <Link href="/pricing">Plans</Link>
+        <Link href="/account/security">Security</Link>
       </nav>
       <div className="header-actions">
         <span className="header-edition">YOUR STUDIO</span>

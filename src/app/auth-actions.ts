@@ -10,6 +10,8 @@ import {
   previewSessionCookieOptions,
 } from "@/lib/auth/session-core";
 import { authenticatePreviewUser } from "@/lib/auth/auth-service";
+import { hashPassword } from "@/lib/auth/password-hash";
+import { consumeAuthRateLimit } from "@/lib/auth/rate-limit";
 import { getAuthStore } from "@/lib/auth/store";
 import { dispatchPasswordResetEmail, getPasswordResetEmailProvider } from "@/lib/auth/email-provider";
 import { applyPreviewPasswordReset, PASSWORD_RESET_INVALID_MESSAGE, requestPreviewPasswordReset } from "@/lib/auth/password-reset-service";
@@ -29,6 +31,11 @@ export interface PasswordResetState {
   changed?: boolean;
 }
 
+export interface ChangePasswordState {
+  error?: string;
+  changed?: boolean;
+}
+
 const loginError = "That login didn’t work. Please check your details and try again.";
 
 export async function signIn(_previousState: SignInState, formData: FormData): Promise<SignInState> {
@@ -44,9 +51,9 @@ export async function signIn(_previousState: SignInState, formData: FormData): P
     if (!hasValidAuthSecret(secret)) return { error: loginError };
     const store = await getAuthStore();
     const requestHeaders = await headers();
-    const address = requestHeaders.get("cf-connecting-ip") ?? "local";
+    const address = getClientAddress(requestHeaders);
     const bucket = await hashRateLimitBucket(secret, "login", `${email.trim().toLowerCase()}:${address}`);
-    if (!await store.consumeRateLimit(bucket, Date.now(), 15 * 60 * 1000, 10)) return { error: loginError };
+    if (!await consumeAuthRateLimit(store, bucket, Date.now(), 15 * 60 * 1000, 10)) return { error: loginError };
     const user = await authenticatePreviewUser(email, password, store);
     if (!user) return { error: loginError };
 
@@ -81,17 +88,20 @@ export async function requestPasswordReset(
 
   try {
     const store = await getAuthStore();
+    const emailProvider = getPasswordResetEmailProvider();
+    if (!store) return { message: "Password reset isn’t set up on this deployment yet. Please contact the preview owner." };
+    if (process.env.NODE_ENV === "production" && !emailProvider) {
+      return { message: "Password reset email isn’t configured yet. Please contact the preview owner." };
+    }
     const requestHeaders = await headers();
-    const address = requestHeaders.get("cf-connecting-ip") ?? "local";
-    const origin = process.env.NODE_ENV === "production"
-      ? "https://www.scorvik.com"
-      : safeLocalOrigin(requestHeaders.get("origin"));
+    const address = getClientAddress(requestHeaders);
+    const origin = getApplicationOrigin(requestHeaders.get("origin"));
     return await requestPreviewPasswordReset({
       email,
       clientAddress: address,
       origin,
       store,
-      emailProvider: getPasswordResetEmailProvider(),
+      emailProvider,
       dispatchEmail: dispatchPasswordResetEmail,
     });
   } catch {
@@ -115,7 +125,7 @@ export async function changePreviewPassword(
   try {
     const store = await getAuthStore();
     const requestHeaders = await headers();
-    const address = requestHeaders.get("cf-connecting-ip") ?? "local";
+    const address = getClientAddress(requestHeaders);
     const changed = await applyPreviewPasswordReset({
       token,
       password,
@@ -128,6 +138,71 @@ export async function changePreviewPassword(
   } catch {
     return { error: PASSWORD_RESET_INVALID_MESSAGE };
   }
+}
+
+export async function changeAuthenticatedPreviewPassword(
+  _previousState: ChangePasswordState,
+  formData: FormData,
+): Promise<ChangePasswordState> {
+  const currentPassword = formData.get("currentPassword");
+  const password = formData.get("password");
+  const confirmation = formData.get("confirmation");
+  if (typeof currentPassword !== "string" || typeof password !== "string" || typeof confirmation !== "string") {
+    return { error: "Please check the password fields and try again." };
+  }
+  if (password !== confirmation) return { error: "Those passwords don’t match. Please try again." };
+  if (password.length < 12 || password.length > 1024) return { error: "Use at least 12 characters for your new password." };
+
+  let changed = false;
+  try {
+    const email = process.env.SCORVIK_PREVIEW_EMAIL?.trim().toLowerCase();
+    const store = await getAuthStore();
+    if (!email || !store) return { error: "Password changes aren’t available on this deployment yet." };
+    const requestHeaders = await headers();
+    const address = getClientAddress(requestHeaders);
+    const secret = process.env.SCORVIK_AUTH_SECRET;
+    if (!hasValidAuthSecret(secret)) return { error: "Password changes aren’t available on this deployment yet." };
+    const bucket = await hashRateLimitBucket(secret, "change-password", `${email}:${address}`);
+    if (!await consumeAuthRateLimit(store, bucket, Date.now(), 15 * 60 * 1000, 5)) {
+      return { error: "Please wait a little before trying again." };
+    }
+    if (!await authenticatePreviewUser(email, currentPassword, store)) {
+      return { error: "Your current password didn’t match. Please try again." };
+    }
+    const updatedVersion = await store.updatePassword(email, await hashPassword(password), Date.now());
+    if (updatedVersion === null) return { error: "We couldn’t update your password just now. Please try again." };
+    changed = true;
+  } catch {
+    return { error: "We couldn’t update your password just now. Please try again." };
+  }
+
+  if (changed) {
+    const cookieStore = await cookies();
+    cookieStore.set(PREVIEW_SESSION_COOKIE, "", { ...previewSessionCookieOptions(), maxAge: 0, expires: new Date(0) });
+    redirect("/login?password=changed");
+  }
+  return { error: "We couldn’t update your password just now. Please try again." };
+}
+
+function getClientAddress(requestHeaders: Headers): string {
+  return requestHeaders.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()
+    ?? requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? "local";
+}
+
+function getApplicationOrigin(origin: string | null): string {
+  const configured = process.env.SCORVIK_APP_URL
+    ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined)
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+  if (configured) {
+    try {
+      const parsed = new URL(configured);
+      if (parsed.protocol === "https:" || (process.env.NODE_ENV !== "production" && parsed.protocol === "http:")) return parsed.origin;
+    } catch {
+      return "http://localhost:3000";
+    }
+  }
+  return safeLocalOrigin(origin);
 }
 
 function safeLocalOrigin(origin: string | null): string {

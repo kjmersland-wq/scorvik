@@ -54,19 +54,13 @@ The fetch layer allows only HTTP/HTTPS, rejects credentials, IP literals and int
 
 ## Private preview authentication
 
-The private preview uses the existing Cloudflare D1 binding named `DB` for the configured preview administrator. The database name is `scorvik-auth`. The `@opennextjs/cloudflare` runtime helper reads `env.DB`; this repository intentionally does not add or replace a Wrangler deployment configuration.
+The private preview is Vercel-first and uses the existing `SCORVIK_PREVIEW_EMAIL`, `SCORVIK_PREVIEW_PASSWORD`, and `SCORVIK_AUTH_SECRET` server variables for bootstrap login and signed HTTP-only sessions. Login does not require a database. When `DATABASE_URL` is configured, the Neon serverless store persists a PBKDF2 password hash, single-use reset-token hashes, rate limits, and session versions. A stored password hash takes precedence over the bootstrap password.
 
-Before using password reset in production, apply the non-destructive migration to the existing database:
+To enable persistent reset and password changes, create a Neon Postgres database, set `DATABASE_URL` in Vercel, and apply `migrations/vercel/0001_auth.sql` with the Neon SQL Editor. This migration only creates tables and indexes; it does not drop data. Without `DATABASE_URL`, bootstrap login continues to work while reset and password changes safely remain unavailable in production.
 
-```bash
-npx wrangler d1 execute scorvik-auth --remote --file=./migrations/0001_private_preview_auth.sql
-```
+Reset links use cryptographically random tokens; only their SHA-256 hashes are stored, they expire after 20 minutes, and credential session-version changes invalidate previous links and sessions. Local `next dev` shows the reset URL only on the development response page. Production email delivery is disabled until `RESEND_API_KEY` and `SCORVIK_EMAIL_FROM` are configured. `SCORVIK_APP_URL` can set the reset-link origin; otherwise the Vercel deployment URL is used. The server-side `PasswordResetEmailProvider` keeps email delivery replaceable.
 
-The migration creates `auth_credentials`, `password_reset_tokens`, and `auth_rate_limits`; it does not drop or overwrite existing tables. You can also run the SQL from `migrations/0001_private_preview_auth.sql` in the existing database's Cloudflare D1 Console.
-
-`SCORVIK_PREVIEW_PASSWORD` remains the bootstrap password until a D1 credential is created by a successful reset. Thereafter, login checks the PBKDF2 hash in D1. Password resets store only a SHA-256 token hash, expire after 20 minutes, are single-use, and increment `session_version` to invalidate previous sessions. The password hash uses PBKDF2-HMAC-SHA-256 with a per-password random salt.
-
-No email provider is configured. In local `next dev`, the reset URL is shown only in the development UI and the in-memory reset store is temporary. In production, reset requests remain neutral and do not claim an email was sent or create a reset token until a provider is wired through `src/lib/auth/email-provider.ts`.
+`migrations/0001_private_preview_auth.sql` is the historical Cloudflare D1 auth migration and is no longer used by the application. The Vercel auth runtime does not import OpenNext, Wrangler, or D1. Existing Cloudflare resources are left untouched.
 
 ## Visual system
 
