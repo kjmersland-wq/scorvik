@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 const steps = [
-  ["01", "Read", "SiteRender looks for your site’s language, imagery, product details and visual cues."],
+  ["01", "Read", "SCORVIK looks for your site’s language, imagery, product details and visual cues."],
   ["02", "Compose", "Those ingredients become a first storyboard: a hook, a story, the product and a clear next step."],
-  ["03", "Refine", "Edit the scenes, choose a format and voice, then ask SiteRender to build a first-cut preview."],
+  ["03", "Refine", "Edit the scenes, choose a format and voice, then ask SCORVIK to build a first-cut preview."],
 ];
 
 export default function HowItWorksPage() {

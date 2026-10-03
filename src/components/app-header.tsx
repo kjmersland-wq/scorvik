@@ -3,9 +3,9 @@ import Link from "next/link";
 export function AppHeader() {
   return (
     <header className="site-header">
-      <Link className="brand" href="/" aria-label="SiteRender home">
+      <Link className="brand" href="/" aria-label="SCORVIK home">
         <span className="brand-mark" aria-hidden="true"><i /></span>
-        <span className="brand-wordmark">SITE<span>RENDER</span><small>CREATIVE VIDEO ENGINE</small></span>
+        <span className="brand-wordmark">SCOR<span>VIK</span><small>CREATIVE VIDEO ENGINE</small></span>
       </Link>
       <nav className="header-nav" aria-label="Main navigation">
         <Link href="/create">Create</Link>

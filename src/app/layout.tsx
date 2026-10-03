@@ -3,8 +3,20 @@ import { AppHeader } from "@/components/app-header";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SiteRender-AI | From website to finished video",
-  description: "Turn any website into a polished marketing video. SiteRender finds the story already there and builds the scenes for you.",
+  applicationName: "SCORVIK",
+  title: "SCORVIK | From website to finished video",
+  description: "Turn any website into a polished marketing video. SCORVIK finds the story already there and builds the scenes for you.",
+  openGraph: {
+    title: "SCORVIK | From website to finished video",
+    description: "Turn any website into a polished marketing video. SCORVIK finds the story already there and builds the scenes for you.",
+    siteName: "SCORVIK",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "SCORVIK | From website to finished video",
+    description: "Turn any website into a polished marketing video. SCORVIK finds the story already there and builds the scenes for you.",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

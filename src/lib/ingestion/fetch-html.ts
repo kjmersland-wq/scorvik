@@ -30,7 +30,7 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
       method: "GET",
       headers: {
         accept: "text/html,application/xhtml+xml;q=0.9",
-        "user-agent": "SiteRenderBot/1.0 (+https://siterender.ai/bot)",
+        "user-agent": "ScorvikBot/1.0",
         "accept-encoding": "identity",
         connection: "close",
       },

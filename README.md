@@ -1,6 +1,6 @@
-# SiteRender-AI
+# SCORVIK
 
-SiteRender turns the story already present on a website into a storyboard and a video preview. This first release is a complete, local mock workflow built with Next.js App Router, React, and strict TypeScript.
+SCORVIK turns the story already present on a website into a storyboard and a video preview. This release is a complete, local mock workflow built with Next.js App Router, React, and strict TypeScript.
 
 ## Run locally
 
