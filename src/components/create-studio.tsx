@@ -5,12 +5,14 @@ import Link from "next/link";
 import { createCreativeBrief, detectBrandProfile } from "@/lib/creative/create-brief";
 import { buildStoryboard } from "@/lib/creative/storyboard-engine";
 import { buildMockAnalysis, createScene, defaultSettings, demoScenes } from "@/lib/mock-data";
+import { defaultAudioMix, fitMusicToVideo } from "@/lib/audio/mix";
 import { saveProject } from "@/lib/projects";
 import type { CreativeBrief, FilmMode, ScenePurpose, SiteAnalysis, StoryScene, VideoFormat, VideoProject, VideoSettings } from "@/types/project";
 import { MusicStudio } from "@/components/music-studio";
 import { platformPresets } from "@/lib/platforms/presets";
 import { getCopy, localizedPath, type Locale } from "@/lib/i18n/copy";
 import { recommendInstructionDuration } from "@/lib/creative/storyboard-engine";
+import { demoMusicCatalog, recommendMusic } from "@/lib/music/recommend";
 
 const formats: VideoFormat[] = ["16:9", "9:16", "1:1", "4:5"];
 const styles = ["Editorial", "Cinematic", "Clean", "Energetic", "Minimal"];
@@ -91,12 +93,14 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     const recommendation = recommendInstructionDuration(sourcedAnalysis.steps?.length ?? 1, locale);
     const suggestedDuration = filmMode === "instruction" ? recommendation.seconds : [15, 20, 30].includes(settings.duration) ? settings.duration : 30;
     const storyboard = buildStoryboard(enrichedAnalysis, brief, { mode: filmMode, locale, targetDuration: suggestedDuration });
+    const suggestedTrack = recommendMusic({ analysis: enrichedAnalysis, brief, duration: storyboard.totalDuration, platform: "youtube", mode: filmMode, style: settings.style })[0]?.track;
 
     setUrl(baseAnalysis.url);
     setAnalysis(enrichedAnalysis);
     setCreativeBrief(brief);
     setScenes(storyboard.scenes);
     setSettings((current) => ({ ...current, mode: filmMode, showTextOnScreen, duration: storyboard.totalDuration, language: locale === "no" ? "Norsk" : current.language, voice: locale === "no" ? text.voices.no[0] : current.voice }));
+      setSettings((current) => ({ ...current, mode: filmMode, showTextOnScreen, duration: storyboard.totalDuration, musicTrackId: suggestedTrack?.id ?? null, language: locale === "no" ? "Norsk" : current.language, voice: locale === "no" ? text.voices.no[0] : current.voice }));
     setStage("storyboard");
   }
 
@@ -124,6 +128,9 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
 
   function beginRender() {
     if (!analysis) return;
+    const selectedTrack = settings.musicTrackId ? demoMusicCatalog.find((track) => track.id === settings.musicTrackId) : undefined;
+    const fittedMusic = selectedTrack ? fitMusicToVideo(selectedTrack.duration, settings.duration) : undefined;
+    const currentAudioMix = settings.audioMix ?? defaultAudioMix;
     const nextProject: VideoProject = {
       id: crypto.randomUUID(),
       title: `${analysis.brand} — ${filmMode === "instruction" ? (locale === "no" ? "instruksjonsfilm" : "how-to film") : (locale === "no" ? "reklamefilm" : "advertising film")}`,
@@ -131,7 +138,16 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       createdAt: new Date().toISOString(),
       analysis,
       scenes,
-      settings: { ...settings, mode: filmMode, showTextOnScreen },
+      settings: {
+        ...settings,
+        mode: filmMode,
+        showTextOnScreen,
+        audioMix: {
+          ...currentAudioMix,
+          music: { ...currentAudioMix.music, fadeOutSeconds: fittedMusic?.fadeOutSeconds ?? currentAudioMix.music.fadeOutSeconds },
+          jingle: filmMode === "advert" ? currentAudioMix.jingle : { ...currentAudioMix.jingle, volume: 0, muted: true },
+        },
+      },
       creativeBrief: creativeBrief ?? undefined,
       version: 1,
     };
@@ -201,7 +217,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="settings-section"><label htmlFor="language">{text.language}</label><select id="language" value={settings.language} onChange={(event) => { const language = event.target.value; updateSetting("language", language); updateSetting("voice", language === "Norsk" ? text.voices.no[0] : text.voices.en[0]); }}>{text.languageOptions.map((language) => <option key={language}>{language}</option>)}</select></div>
           <div className="settings-section"><label htmlFor="voice">{text.voice}</label><select id="voice" value={settings.voice} onChange={(event) => updateSetting("voice", event.target.value)}>{(settings.language === "Norsk" ? text.voices.no : text.voices.en).map((voice) => <option key={voice}>{voice}</option>)}</select></div>
           <div className="settings-section"><label>{text.style}</label><div className="choice-row">{styles.map((style, index) => <button key={style} className={`choice ${settings.style === style ? "selected" : ""}`} onClick={() => updateSetting("style", style)}>{styleLabels[index]}</button>)}</div></div>
-          <div className="settings-section" id="music"><MusicStudio locale={locale} analysis={analysis} brief={creativeBrief ?? { brand: analysis.brand, productOrService: "", targetAudience: [], coreMessage: analysis.description, keyBenefits: analysis.sellingPoints, tone: ["modern"], visualStyle: settings.style, suggestedHook: analysis.title, callToAction: "Explore", suggestedPacing: "balanced", suggestedMusicDirection: "Modern", suggestedVoiceDirection: "Clear", recommendedPlatforms: [], evidence: [], confidence: "low" }} duration={settings.duration} selectedTrackId={settings.musicTrackId ?? null} onSelect={(trackId) => updateSetting("musicTrackId", trackId)}/></div>
+          <div className="settings-section" id="music"><MusicStudio locale={locale} mode={filmMode} analysis={analysis} brief={creativeBrief ?? { brand: analysis.brand, productOrService: "", targetAudience: [], coreMessage: analysis.description, keyBenefits: analysis.sellingPoints, tone: ["modern"], visualStyle: settings.style, suggestedHook: analysis.title, callToAction: "Explore", suggestedPacing: "balanced", suggestedMusicDirection: "Modern", suggestedVoiceDirection: "Clear", recommendedPlatforms: [], evidence: [], confidence: "low" }} duration={settings.duration} selectedTrackId={settings.musicTrackId ?? null} onSelect={(trackId) => updateSetting("musicTrackId", trackId)}/></div>
           <div className="settings-section"><label>{text.musicFeel}</label><p>{musicDirection}</p><small>{text.noLicensedMusic}</small></div>
           <div className="settings-section mixer-section"><label>{text.adjustSound}</label>{([[text.voiceLevel, "voice", 0.8], [text.musicLevel, "music", 0.55], [text.sceneSounds, "sfx", 0.25]] as const).map(([label, key, defaultValue]) => <div className="mixer-row" key={key}><span>{label}</span><input aria-label={`${label} level`} type="range" min="0" max="1" step="0.05" value={settings.audioMix?.[key].volume ?? defaultValue} onChange={(event) => updateSetting("audioMix", { ...(settings.audioMix ?? { voice: { volume: 0.8, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, music: { volume: 0.55, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, sfx: { volume: 0.25, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, jingle: { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, duckMusicUnderVoice: true }), [key]: { ...(settings.audioMix?.[key] ?? { volume: defaultValue, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }), volume: Number(event.target.value) } })}/><b>{Math.round((settings.audioMix?.[key].volume ?? defaultValue) * 100)}%</b></div>)}{filmMode === "advert" && <div className="mixer-row"><span>{text.closingSound}</span><input aria-label={`${text.closingSound} level`} type="range" min="0" max="1" step="0.05" value={settings.audioMix?.jingle.volume ?? 0.35} onChange={(event) => updateSetting("audioMix", { ...(settings.audioMix ?? { voice: { volume: 0.8, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, music: { volume: 0.55, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, sfx: { volume: 0.25, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, jingle: { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, duckMusicUnderVoice: true }), jingle: { ...(settings.audioMix?.jingle ?? { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }), volume: Number(event.target.value) } })}/><b>{Math.round((settings.audioMix?.jingle.volume ?? 0.35) * 100)}%</b></div>}<small>{text.mixNote}</small></div>
           <div className="settings-footer"><button className="button" disabled={!scenes.length} onClick={beginRender}>{text.makeFilm} <span aria-hidden="true">→</span></button><p>{text.savedPreview}</p></div>

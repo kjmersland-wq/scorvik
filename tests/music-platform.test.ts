@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fitMusicToVideo, musicGainWithVoiceDucking } from "../src/lib/audio/mix.ts";
 import { getPlatformPreset, getPlatformPresets, platformPresets } from "../src/lib/platforms/presets.ts";
-import { demoMusicCatalog, recommendMusic } from "../src/lib/music/recommend.ts";
+import { demoMusicCatalog, isClearedRoyaltyFreeTrack, localMusicFiles, recommendMusic } from "../src/lib/music/recommend.ts";
 import { findTaxonomyEntry, moodChoices, musicTaxonomy } from "../src/lib/music/taxonomy.ts";
 import { createCreativeBrief, detectBrandProfile } from "../src/lib/creative/create-brief.ts";
 import type { SiteAnalysis } from "../src/types/project.ts";
@@ -29,15 +29,18 @@ test("taxonomy covers required genre breadth, subgenres and mood discovery", () 
 test("music ranking is deterministic, brand-sensitive and respects explicit genre", () => {
   const site = analysis("saas");
   const brief = createCreativeBrief(site);
-  const licensedCatalog = demoMusicCatalog.map((track) => ({ ...track, audioUrl: `https://audio.example/${track.id}.mp3`, commercialUse: true, allowedPlatforms: ["youtube"], licenseType: "Royalty-free commercial license", licenseUrl: "https://license.example/track", licenseCheckedAt: "2026-01-01T00:00:00.000Z" }));
-  const recommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] }, licensedCatalog);
-  assert.equal(recommendations[0]?.track.id, "track-modern-horizon");
-  assert.deepEqual(recommendations.map((item) => item.track.id), recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] }, licensedCatalog).map((item) => item.track.id));
-  assert.ok(recommendations.every((item) => item.licenseWarning.includes("verified")));
-  const bluesOnly = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", genrePreference: "Blues" }, licensedCatalog);
+  const recommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert", userMoods: ["Modern", "Confident"] });
+  assert.equal(recommendations[0]?.track.id, "modern-92-ad");
+  assert.deepEqual(recommendations.map((item) => item.track.id), recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert", userMoods: ["Modern", "Confident"] }).map((item) => item.track.id));
+  assert.ok(recommendations.every((item) => item.track.usage === "ad" && item.licenseWarning.includes("royalty-free")));
+  const bluesOnly = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert", genrePreference: "Blues" });
   assert.ok(bluesOnly.length > 0);
   assert.ok(bluesOnly.every((item) => item.track.genre === "Blues"));
-  assert.deepEqual(recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube" }), []);
+  const bluesMood = bluesOnly.find((item) => item.track.mood[0] === "Blues");
+  assert.ok(bluesMood);
+  assert.deepEqual([bluesMood.track.id, ...bluesMood.alternatives.map((track) => track.id)].sort(), ["blues-60-ad", "blues-60-ad-2", "blues-65-ad", "blues-65-ad-2"]);
+  assert.deepEqual(recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "instruction" }).map((item) => item.track.usage), ["guide"]);
+  assert.ok(recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert" }).some((item) => item.alternatives.length > 0));
 });
 
 test("platform presets include required social sizes and safe areas", () => {
@@ -61,8 +64,10 @@ test("music fitting creates gentle endings and warns before unlicensed looping",
   assert.equal(musicGainWithVoiceDucking(0.55, false, true), 0.55);
 });
 
-test("catalog entries clearly distinguish mock licensing from cleared commercial tracks", () => {
-  assert.ok(demoMusicCatalog.every((track) => track.audioUrl === null && track.commercialUse === false && track.licenseUrl === ""));
-  assert.ok(demoMusicCatalog.every((track) => track.licenseType.includes("mock metadata")));
+test("only the 15 local owned royalty-free files are commercially selectable", () => {
+  assert.equal(demoMusicCatalog.length, 15);
+  assert.deepEqual(demoMusicCatalog.map((track) => track.audioUrl?.replace("/music/", "")).sort(), [...localMusicFiles].sort());
+  assert.ok(demoMusicCatalog.every((track) => track.commercialUse && isClearedRoyaltyFreeTrack(track, "youtube")));
+  assert.equal(isClearedRoyaltyFreeTrack({ ...demoMusicCatalog[0], audioUrl: "https://audio.example/track.mp3" }, "youtube"), false);
   assert.equal(detectBrandProfile({ ...analysis("restaurant"), description: "A restaurant serving seasonal food with dinner reservations." }).category, "restaurant");
 });

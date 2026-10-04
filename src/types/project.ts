@@ -111,6 +111,7 @@ export interface MusicTrack {
   vocals: boolean;
   instrumental: boolean;
   useCases: string[];
+  usage?: "ad" | "guide";
   brandFit: string[];
   commercialUse: boolean;
   allowedPlatforms: string[];
