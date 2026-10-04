@@ -15,6 +15,7 @@ export function AppHeader({ authenticated }: AppHeaderProps) {
   const locale = pathname === "/no" || pathname.startsWith("/no/") ? "no" : "en";
   const text = getCopy(locale);
   const href = (path: string) => localizedPath(locale, path);
+  if (pathname === "/login") return null;
 
   return (
     <header className="site-header">

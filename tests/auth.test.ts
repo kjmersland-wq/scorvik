@@ -54,8 +54,11 @@ test("the cookie is HTTP-only, same-site, scoped to the host, and secure in prod
   assert.equal(previewSessionCookieOptions(true).secure, true);
 });
 
-test("all page and API paths pass through without the preview authentication gate", () => {
-  for (const path of ["/", "/create", "/projects", "/projects/example-id", "/account/security", "/api", "/api/website/analyze", "/pricing", "/how-it-works", "/no", "/no/create", "/no/projects", "/anything-else", "/login", "/forgot-password", "/reset-password", "/_next/static/chunks/app.js", "/_next/image/logo.png", "/favicon.ico", "/images/logo.svg"]) {
+test("all public content pages require the password box while login, API and assets pass through", () => {
+  for (const path of ["/", "/create", "/projects", "/projects/example-id", "/account/security", "/api", "/api/website/analyze", "/pricing", "/how-it-works", "/no", "/no/create", "/no/projects", "/no/pricing", "/no/how-it-works", "/anything-else"]) {
+    assert.equal(requiresPreviewAuthentication(path), path.startsWith("/api") ? false : true, path);
+  }
+  for (const path of ["/login", "/_next/static/chunks/app.js", "/_next/image/logo.png", "/favicon.ico", "/images/logo.svg", "/music/warm-104-ad.mp3"]) {
     assert.equal(requiresPreviewAuthentication(path), false, path);
   }
 });

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import {
   createPreviewSessionToken,
   hasValidAuthSecret,
-  previewPasswordMatches,
+  previewCredentialsMatch,
   PREVIEW_SESSION_COOKIE,
   previewSessionCookieOptions,
 } from "@/lib/auth/session-core";
@@ -72,20 +72,22 @@ export async function signIn(_previousState: SignInState, formData: FormData): P
 export async function signInWithPreviewPassword(_previousState: SignInState, formData: FormData): Promise<SignInState> {
   const password = formData.get("password");
   const locale = formData.get("locale") === "no" ? "no" : "en";
+  const fallbackPath = locale === "no" ? "/no/create" : "/create";
+  const returnPath = safeAuthReturnPath(formData.get("next"), fallbackPath);
   const error = locale === "no" ? "Det passordet gikk ikke. Prøv igjen." : "That didn’t work. Please try again.";
   if (typeof password !== "string" || !password || password.length > 1024) return { error };
 
   try {
     const secret = process.env.SCORVIK_AUTH_SECRET;
-    if (!hasValidAuthSecret(secret) || !await previewPasswordMatches(password)) return { error };
+    const email = process.env.SCORVIK_PREVIEW_EMAIL?.trim().toLowerCase();
+    if (!email || !hasValidAuthSecret(secret) || !await previewCredentialsMatch(email, password)) return { error };
 
     const store = await getAuthStore();
     const requestHeaders = await headers();
     const address = getClientAddress(requestHeaders);
-    const bucket = await hashRateLimitBucket(secret, "anonymous-preview-login", address);
+    const bucket = await hashRateLimitBucket(secret, "anonymous-preview-login", `${email}:${address}`);
     if (!await consumeAuthRateLimit(store, bucket, Date.now(), 15 * 60 * 1000, 10)) return { error };
 
-    const email = process.env.SCORVIK_PREVIEW_EMAIL?.trim().toLowerCase();
     const credential = store && email ? await store.getCredential(email) : null;
     const token = await createPreviewSessionToken(secret, credential?.session_version ?? 0);
     const cookieStore = await cookies();
@@ -94,7 +96,7 @@ export async function signInWithPreviewPassword(_previousState: SignInState, for
     return { error };
   }
 
-  redirect(locale === "no" ? "/no/create" : "/create");
+  redirect(returnPath);
 }
 
 export async function signOut(): Promise<void> {
@@ -243,4 +245,15 @@ function safeLocalOrigin(origin: string | null): string {
     return "http://localhost:3000";
   }
   return "http://localhost:3000";
+}
+
+function safeAuthReturnPath(value: FormDataEntryValue | null, fallback: string): string {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return fallback;
+  try {
+    const target = new URL(value, "https://scorvik.invalid");
+    if (target.origin !== "https://scorvik.invalid" || target.pathname === "/login") return fallback;
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return fallback;
+  }
 }

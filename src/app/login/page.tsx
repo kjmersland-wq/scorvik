@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
-import { PreviewLoginForm } from "@/components/preview-login-form";
+import { AnonymousPasswordBox } from "@/components/anonymous-password-box";
 
 export const metadata: Metadata = {
-  title: "Private preview",
-  description: "Sign in to continue.",
+  title: "SCORVIK | Preview access",
+  description: "Open the SCORVIK preview with your password.",
 };
 
-export default function LoginPage() {
-  return (
-    <section className="preview-login" aria-labelledby="preview-login-title">
-      <span className="eyebrow">PRIVATE PREVIEW</span>
-      <h1 id="preview-login-title">Private preview</h1>
-      <p>Sign in to continue.</p>
-      <PreviewLoginForm />
-    </section>
-  );
+interface LoginPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const nextParam = params.next;
+  const nextPath = typeof nextParam === "string" ? nextParam : "/create";
+  const locale = nextPath === "/no" || nextPath.startsWith("/no/") ? "no" : "en";
+  return <AnonymousPasswordBox locale={locale} nextPath={nextPath} standalone />;
 }

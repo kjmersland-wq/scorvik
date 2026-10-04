@@ -108,7 +108,11 @@ export async function isPreviewSessionTokenValid(token: string | undefined, secr
 }
 
 export function requiresPreviewAuthentication(_pathname: string): boolean {
-  return false;
+  const path = _pathname.length > 1 ? _pathname.replace(/\/+$/, "") : _pathname;
+  if (path === "/login" || path === "/api" || path.startsWith("/api/")) return false;
+  if (path.startsWith("/_next/") || path === "/favicon.ico") return false;
+  if (/\.(?:svg|png|jpe?g|gif|webp|ico|woff2?|ttf|otf|mp3|mp4|srt)$/i.test(path)) return false;
+  return true;
 }
 
 export function previewSessionCookieOptions(production = process.env.NODE_ENV === "production") {

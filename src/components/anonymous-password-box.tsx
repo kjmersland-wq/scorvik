@@ -28,18 +28,19 @@ const messages = {
 
 const initialState: SignInState = {};
 
-export function AnonymousPasswordBox({ locale }: { locale: Locale }) {
+export function AnonymousPasswordBox({ locale, nextPath = "/create", standalone = false }: { locale: Locale; nextPath?: string; standalone?: boolean }) {
   const [state, formAction, pending] = useActionState(signInWithPreviewPassword, initialState);
   const text = messages[locale];
   const fieldId = `preview-password-${locale}`;
 
   return (
-    <aside className={styles.box} aria-label={text.region}>
+    <aside className={`${styles.box} ${standalone ? styles.standalone : ""}`} aria-label={text.region}>
       <span className={styles.eyebrow}>{text.eyebrow}</span>
       <h2 className={styles.title}>{text.title}</h2>
       <p className={styles.description}>{text.description}</p>
       <form action={formAction} className={styles.form}>
         <input type="hidden" name="locale" value={locale} />
+        <input type="hidden" name="next" value={nextPath} />
         <label htmlFor={fieldId}>{text.label}</label>
         <input
           className={styles.input}
