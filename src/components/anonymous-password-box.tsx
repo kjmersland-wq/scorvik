@@ -11,7 +11,8 @@ const messages = {
     eyebrow: "SCORVIK PREVIEW",
     title: "Ready to make a film?",
     description: "Enter the preview password to open the film studio.",
-    label: "Password",
+    emailLabel: "Email address",
+    passwordLabel: "Password",
     button: "Open the studio",
     pending: "Opening…",
   },
@@ -20,7 +21,8 @@ const messages = {
     eyebrow: "SCORVIK FORHÅNDSVISNING",
     title: "Klar til å lage film?",
     description: "Skriv inn passordet for å åpne filmverkstedet.",
-    label: "Passord",
+    emailLabel: "E-postadresse",
+    passwordLabel: "Passord",
     button: "Åpne filmverkstedet",
     pending: "Åpner…",
   },
@@ -31,7 +33,8 @@ const initialState: SignInState = {};
 export function AnonymousPasswordBox({ locale, nextPath = "/create", standalone = false }: { locale: Locale; nextPath?: string; standalone?: boolean }) {
   const [state, formAction, pending] = useActionState(signInWithPreviewPassword, initialState);
   const text = messages[locale];
-  const fieldId = `preview-password-${locale}`;
+  const emailId = `preview-email-${locale}`;
+  const passwordId = `preview-password-${locale}`;
 
   return (
     <aside className={`${styles.box} ${standalone ? styles.standalone : ""}`} aria-label={text.region}>
@@ -41,10 +44,21 @@ export function AnonymousPasswordBox({ locale, nextPath = "/create", standalone 
       <form action={formAction} className={styles.form}>
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="next" value={nextPath} />
-        <label htmlFor={fieldId}>{text.label}</label>
+        <label htmlFor={emailId}>{text.emailLabel}</label>
         <input
           className={styles.input}
-          id={fieldId}
+          id={emailId}
+          name="email"
+          type="email"
+          autoComplete="username"
+          autoCapitalize="none"
+          maxLength={254}
+          required
+        />
+        <label htmlFor={passwordId}>{text.passwordLabel}</label>
+        <input
+          className={styles.input}
+          id={passwordId}
           name="password"
           type="password"
           autoComplete="current-password"

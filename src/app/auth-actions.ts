@@ -71,16 +71,17 @@ export async function signIn(_previousState: SignInState, formData: FormData): P
 }
 
 export async function signInWithPreviewPassword(_previousState: SignInState, formData: FormData): Promise<SignInState> {
+  const submittedEmail = formData.get("email");
   const password = formData.get("password");
   const locale = formData.get("locale") === "no" ? "no" : "en";
   const fallbackPath = locale === "no" ? "/no/create" : "/create";
   const returnPath = safeAuthReturnPath(formData.get("next"), fallbackPath);
   const error = locale === "no" ? "Det passordet gikk ikke. Prøv igjen." : "That didn’t work. Please try again.";
-  if (typeof password !== "string" || !password || password.length > 1024) return { error };
+  if (typeof submittedEmail !== "string" || submittedEmail.length > 254 || typeof password !== "string" || !password || password.length > 1024) return { error };
 
   try {
     const secret = process.env.SCORVIK_AUTH_SECRET;
-    const email = process.env.SCORVIK_PREVIEW_EMAIL?.trim().toLowerCase();
+    const email = submittedEmail.trim().toLowerCase();
     if (!email || !hasValidAuthSecret(secret) || !await previewCredentialsMatch(email, password)) return { error };
 
     const requestHeaders = await headers();
@@ -251,6 +252,7 @@ function safeAuthReturnPath(value: FormDataEntryValue | null, fallback: string):
   try {
     const target = new URL(value, "https://scorvik.invalid");
     if (target.origin !== "https://scorvik.invalid" || target.pathname === "/login") return fallback;
+    if (target.pathname === "/" || target.pathname === "/no") return fallback;
     return `${target.pathname}${target.search}${target.hash}`;
   } catch {
     return fallback;
