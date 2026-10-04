@@ -1,5 +1,6 @@
 export type VideoFormat = "16:9" | "9:16" | "1:1" | "4:5";
-export type ScenePurpose = "Hook" | "Story" | "Product" | "Benefit" | "Proof" | "CTA";
+export type FilmMode = "advert" | "instruction";
+export type ScenePurpose = "Hook" | "Story" | "Product" | "Benefit" | "Proof" | "CTA" | "Step";
 export type Confidence = "high" | "medium" | "low";
 
 export interface SourcedValue<T> {
@@ -50,6 +51,8 @@ export interface SiteAnalysis {
   logoCandidates?: string[];
   relevantLinks?: Array<{ label: string; url: string }>;
   callsToAction?: string[];
+  buttons?: string[];
+  steps?: Array<{ title: string; description: string; action?: string }>;
   proofPoints?: string[];
   brandProfile?: BrandProfile;
   fieldSources?: Record<string, SourcedValue<unknown>>;
@@ -148,6 +151,8 @@ export interface AudioMix {
 }
 
 export interface VideoSettings {
+  mode?: FilmMode;
+  showTextOnScreen?: boolean;
   format: VideoFormat;
   duration: number;
   language: string;

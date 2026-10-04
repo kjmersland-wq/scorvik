@@ -73,6 +73,15 @@ export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
     if (links.length < 25) links.push({ label, url: href });
     if (/shop|buy|book|start|try|contact|learn|discover|order|sign up|get started|menu/i.test(label) && callsToAction.length < 10) callsToAction.push(label);
   }
+  const buttons = extractTagText(html, "button").slice(0, 20);
+  for (const label of buttons) {
+    if (/shop|buy|book|start|try|contact|learn|discover|order|sign up|get started|menu|continue|next/i.test(label) && callsToAction.length < 10 && !callsToAction.includes(label)) callsToAction.push(label);
+  }
+  const steps = extractTagText(html, "li").slice(0, 10).map((text) => {
+    const firstSentenceEnd = text.search(/[.!?](?:\s|$)/);
+    const title = firstSentenceEnd > 8 ? text.slice(0, firstSentenceEnd + 1) : text.slice(0, 84);
+    return { title: title.trim(), description: text };
+  });
   const colors = new Set<string>();
   for (const match of html.matchAll(/(?:color|background-color)\s*:\s*(#[\da-f]{3,8}|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%]+\))/gi)) {
     if (colors.size >= 8) break;
@@ -108,6 +117,8 @@ export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
     images: [...imageUrls],
     logoCandidates: [...logoUrls],
     relevantLinks: links,
+    buttons,
+    steps,
     callsToAction: ctaMatches,
     proofPoints,
     fieldSources,

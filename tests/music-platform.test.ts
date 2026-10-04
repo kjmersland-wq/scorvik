@@ -29,13 +29,15 @@ test("taxonomy covers required genre breadth, subgenres and mood discovery", () 
 test("music ranking is deterministic, brand-sensitive and respects explicit genre", () => {
   const site = analysis("saas");
   const brief = createCreativeBrief(site);
-  const recommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] });
+  const licensedCatalog = demoMusicCatalog.map((track) => ({ ...track, audioUrl: `https://audio.example/${track.id}.mp3`, commercialUse: true, allowedPlatforms: ["youtube"], licenseType: "Royalty-free commercial license", licenseUrl: "https://license.example/track", licenseCheckedAt: "2026-01-01T00:00:00.000Z" }));
+  const recommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] }, licensedCatalog);
   assert.equal(recommendations[0]?.track.id, "track-modern-horizon");
-  assert.deepEqual(recommendations.map((item) => item.track.id), recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] }).map((item) => item.track.id));
-  assert.ok(recommendations.every((item) => item.licenseWarning.includes("Sample details only")));
-  const bluesOnly = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", genrePreference: "Blues" });
+  assert.deepEqual(recommendations.map((item) => item.track.id), recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", userMoods: ["Modern", "Confident"] }, licensedCatalog).map((item) => item.track.id));
+  assert.ok(recommendations.every((item) => item.licenseWarning.includes("verified")));
+  const bluesOnly = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", genrePreference: "Blues" }, licensedCatalog);
   assert.ok(bluesOnly.length > 0);
   assert.ok(bluesOnly.every((item) => item.track.genre === "Blues"));
+  assert.deepEqual(recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube" }), []);
 });
 
 test("platform presets include required social sizes and safe areas", () => {

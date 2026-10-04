@@ -3,7 +3,7 @@ import test from "node:test";
 import { fetchWebsiteHtml } from "../src/lib/ingestion/fetch-html.ts";
 import { parseWebsiteHtml } from "../src/lib/ingestion/parse-html.ts";
 import { createCreativeBrief, detectBrandProfile } from "../src/lib/creative/create-brief.ts";
-import { buildStoryboard } from "../src/lib/creative/storyboard-engine.ts";
+import { buildStoryboard, recommendInstructionDuration } from "../src/lib/creative/storyboard-engine.ts";
 
 const resolver = async () => [{ address: "93.184.216.34", family: 4 as const }];
 const response = (status: number, headers: Record<string, string>, body = "<html><body>Public content</body></html>") => ({ status, headers, body });
@@ -36,7 +36,7 @@ test("rejects non-HTML content, access denials and oversized pages", async () =>
 });
 
 test("extracts metadata, headings, image candidates, links, language and source confidence", () => {
-  const html = `<html lang="en"><head><title>Acme | Better planning</title><meta name="description" content="Plan projects with less effort."><meta property="og:site_name" content="Acme"><meta property="og:image" content="/social.jpg"><link rel="canonical" href="/home"><link rel="icon" href="/favicon.png"><style>body{color:#123456}</style></head><body><h1>Plan work clearly</h1><h2>Built for small teams</h2><p>Trusted by 2000+ teams.</p><a href="/start">Get started</a><img src="/logo.svg" alt="Acme logo"><img src="https://cdn.example.com/product.jpg" alt="Product"></body></html>`;
+  const html = `<html lang="en"><head><title>Acme | Better planning</title><meta name="description" content="Plan projects with less effort."><meta property="og:site_name" content="Acme"><meta property="og:image" content="/social.jpg"><link rel="canonical" href="/home"><link rel="icon" href="/favicon.png"><style>body{color:#123456}</style></head><body><h1>Plan work clearly</h1><h2>Built for small teams</h2><ol><li>Create a workspace</li><li>Invite your team</li></ol><button>Continue setup</button><p>Trusted by 2000+ teams.</p><a href="/start">Get started</a><img src="/logo.svg" alt="Acme logo"><img src="https://cdn.example.com/product.jpg" alt="Product"></body></html>`;
   const analysis = parseWebsiteHtml(html, "https://acme.example/");
   assert.equal(analysis.title, "Acme | Better planning");
   assert.equal(analysis.description, "Plan projects with less effort.");
@@ -47,6 +47,8 @@ test("extracts metadata, headings, image candidates, links, language and source 
   assert.equal(analysis.language, "en");
   assert.equal(analysis.logoCandidates?.[0], "https://acme.example/logo.svg");
   assert.equal(analysis.relevantLinks?.[0]?.url, "https://acme.example/start");
+  assert.deepEqual(analysis.steps?.map((step) => step.title), ["Create a workspace", "Invite your team"]);
+  assert.ok(analysis.buttons?.includes("Continue setup"));
   assert.ok(analysis.proofPoints?.length);
   assert.equal(analysis.fieldSources?.title?.confidence, "high");
 });
@@ -60,7 +62,7 @@ test("classifies distinct website types and creates an evidence-led brief", () =
   assert.match(brief.coreMessage, /Seasonal food/);
 });
 
-test("generates category-adaptive scene counts, details, and target duration", () => {
+test("generates the fixed five-scene advertising structure and target duration", () => {
   const restaurant = parseWebsiteHtml("<html><head><title>Harbor Table</title><meta name='description' content='Seasonal food and dinner reservations.'></head><body><h1>Book a table</h1><h2>Our menu</h2></body></html>", "https://harbor.example/");
   const profile = detectBrandProfile(restaurant);
   const enriched = { ...restaurant, brandProfile: profile };
@@ -72,5 +74,19 @@ test("generates category-adaptive scene counts, details, and target duration", (
   assert.ok(storyboard.scenes.every((scene) => scene.id && scene.order !== undefined && scene.transition && scene.musicCue !== undefined || scene.id));
   const saas = { ...enriched, brandProfile: { ...profile, category: "saas" as const } };
   const saasStory = buildStoryboard(saas, createCreativeBrief(saas), { targetDuration: 20 });
-  assert.equal(saasStory.scenes.length, 4);
+  assert.deepEqual(saasStory.scenes.map((scene) => scene.purpose), ["Hook", "Product", "Benefit", "Proof", "CTA"]);
+  assert.equal(saasStory.scenes.length, 5);
+  assert.equal(buildStoryboard(saas, createCreativeBrief(saas), { targetDuration: 60 }).totalDuration, 30);
+});
+
+test("instruction stories keep one scene per ordered step and explain the recommended duration", () => {
+  const site = parseWebsiteHtml("<html><head><title>Quietform</title></head><body><h1>Work calmly</h1><ol><li>Create a workspace</li><li>Invite your team</li><li>Set up a workflow</li><li>Review the result</li></ol></body></html>", "https://quietform.example/");
+  const brief = createCreativeBrief(site);
+  const storyboard = buildStoryboard(site, brief, { mode: "instruction", locale: "no" });
+  assert.deepEqual(storyboard.scenes.map((scene) => scene.headline), site.steps?.map((step) => step.title));
+  assert.ok(storyboard.scenes.every((scene) => scene.purpose === "Step"));
+  assert.equal(storyboard.totalDuration, 60);
+  assert.match(storyboard.rationale, /4 steg/);
+  assert.deepEqual(recommendInstructionDuration(1, "no"), { seconds: 25, rationale: "Ett steg, omtrent 25 sekunder." });
+  assert.equal(recommendInstructionDuration(7, "no").seconds, 90);
 });

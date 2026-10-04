@@ -27,6 +27,15 @@ export interface RankedMusicTrack {
   licenseWarning: string;
 }
 
+export function isClearedRoyaltyFreeTrack(track: MusicTrack, platform: string): boolean {
+  return track.commercialUse
+    && Boolean(track.audioUrl)
+    && Boolean(track.licenseUrl.trim())
+    && Boolean(track.licenseCheckedAt)
+    && /royalty[- ]free/i.test(track.licenseType)
+    && track.allowedPlatforms.includes(platform);
+}
+
 function suggestedGenres(category: string, brief: CreativeBrief): string[] {
   const text = `${brief.tone.join(" ")} ${brief.suggestedMusicDirection}`.toLowerCase();
   if (category === "restaurant" || category === "travel") return /premium|elegant|sophisticated/.test(text) ? ["Jazz", "Cinematic", "Acoustic / Folk"] : ["Acoustic / Folk", "Soul / R&B", "Jazz"];
@@ -39,6 +48,7 @@ export function recommendMusic(input: MusicRecommendationInput, catalog: MusicTr
   const category = input.analysis.brandProfile?.category ?? "other";
   const inferred = suggestedGenres(category, input.brief);
   return catalog
+    .filter((track) => isClearedRoyaltyFreeTrack(track, input.platform))
     .filter((track) => !input.genrePreference || track.genre === input.genrePreference || track.subgenre === input.genrePreference)
     .map((track) => {
       let score = 0;
@@ -62,7 +72,7 @@ export function recommendMusic(input: MusicRecommendationInput, catalog: MusicTr
         track,
         score,
         matchReasons,
-        licenseWarning: track.commercialUse && track.licenseUrl ? "Check that this permission covers your use before adding the track." : "Sample details only. There is no audio file or permission to use the track.",
+        licenseWarning: "Royalty-free commercial license verified.",
       };
     })
     .sort((left, right) => right.score - left.score || left.track.id.localeCompare(right.track.id));

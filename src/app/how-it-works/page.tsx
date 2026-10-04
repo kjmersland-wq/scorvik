@@ -1,11 +1,8 @@
 import Link from "next/link";
+import { getCopy, localizedPath, type Locale } from "@/lib/i18n/copy";
 
-const steps = [
-  ["01", "Get to know your brand", "We look for the words, images and details that make your website feel like you."],
-  ["02", "Shape the story", "We'll bring those pieces together in a first storyboard. You decide what stays."],
-  ["03", "Make it yours", "Choose the feeling, voice and format. Then take a look at your first preview."],
-];
-
-export default function HowItWorksPage() {
-  return <div className="create-page info-page"><div className="page-heading"><div><span className="eyebrow">A thoughtful place to start</span><h1>From website to story.</h1><p>Your website gives us the details. You make the story your own.</p></div><Link href="/create" className="button">Start with your website <span aria-hidden="true">→</span></Link></div><div className="steps info-steps">{steps.map(([number,title,copy])=><article className="step" key={number}><span className="step-no">{number} / 03</span><h3>{title}</h3><p>{copy}</p></article>)}</div><section className="panel info-note"><span className="eyebrow">A first look</span><h2>Try the whole journey with a sample story.</h2><p>Explore the flow with sample details, or use your own website when you’re ready.</p><Link href="/create" className="text-link showcase-link">Take a look →</Link></section></div>;
+export default function HowItWorksPage({ locale = "en" }: { locale?: Locale }) {
+  const text = getCopy(locale).how;
+  const href = localizedPath(locale, "/create");
+  return <div className="create-page info-page"><div className="page-heading"><div><span className="eyebrow">{text.eyebrow}</span><h1>{text.title}</h1><p>{text.description}</p></div><Link href={href} className="button">{text.start} <span aria-hidden="true">→</span></Link></div><div className="steps info-steps">{text.steps.map(([title,description],index)=><article className="step" key={title}><span className="step-no">{String(index+1).padStart(2,"0")} / 03</span><h3>{title}</h3><p>{description}</p></article>)}</div><section className="panel info-note"><span className="eyebrow">{text.noteEyebrow}</span><h2>{text.noteTitle}</h2><p>{text.noteDescription}</p><Link href={href} className="text-link showcase-link">{text.takeLook} →</Link></section></div>;
 }
