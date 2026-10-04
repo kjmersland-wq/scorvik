@@ -5,6 +5,7 @@ import {
   createPreviewSessionToken,
   hasPreviewCredentials,
   isPreviewSessionTokenValid,
+  OWNER_PASSWORD_SESSION_VERSION,
   previewCredentialsMatch,
   PREVIEW_SESSION_MAX_AGE_SECONDS,
   previewSessionCookieOptions,
@@ -39,6 +40,7 @@ test("signed sessions expire and reject tampering or a different secret", async 
   assert.equal(await isPreviewSessionTokenValid(`${token}x`, secret, now), false);
   assert.equal(await isPreviewSessionTokenValid(token, randomBytes(32).toString("base64url"), now), false);
   assert.equal(await isPreviewSessionTokenValid(token, undefined, now), false);
+  assert.equal(await isPreviewSessionTokenValid(await createPreviewSessionToken(secret, OWNER_PASSWORD_SESSION_VERSION, now), secret, now), true);
   await assert.rejects(createPreviewSessionToken("short", now));
 });
 

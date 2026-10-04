@@ -1,5 +1,6 @@
 export const PREVIEW_SESSION_COOKIE = "scorvik-preview-session";
 export const PREVIEW_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
+export const OWNER_PASSWORD_SESSION_VERSION = Number.MAX_SAFE_INTEGER;
 const PREVIEW_SESSION_MAX_AGE_MS = PREVIEW_SESSION_MAX_AGE_SECONDS * 1000;
 const SESSION_CONTEXT_V1 = "scorvik-private-preview:v1:";
 const SESSION_CONTEXT_V2 = "scorvik-private-preview:v2:";

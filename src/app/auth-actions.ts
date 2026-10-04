@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import {
   createPreviewSessionToken,
   hasValidAuthSecret,
+  OWNER_PASSWORD_SESSION_VERSION,
   previewCredentialsMatch,
   PREVIEW_SESSION_COOKIE,
   previewSessionCookieOptions,
@@ -82,14 +83,12 @@ export async function signInWithPreviewPassword(_previousState: SignInState, for
     const email = process.env.SCORVIK_PREVIEW_EMAIL?.trim().toLowerCase();
     if (!email || !hasValidAuthSecret(secret) || !await previewCredentialsMatch(email, password)) return { error };
 
-    const store = await getAuthStore();
     const requestHeaders = await headers();
     const address = getClientAddress(requestHeaders);
     const bucket = await hashRateLimitBucket(secret, "anonymous-preview-login", `${email}:${address}`);
-    if (!await consumeAuthRateLimit(store, bucket, Date.now(), 15 * 60 * 1000, 10)) return { error };
+    if (!await consumeAuthRateLimit(null, bucket, Date.now(), 15 * 60 * 1000, 10)) return { error };
 
-    const credential = store && email ? await store.getCredential(email) : null;
-    const token = await createPreviewSessionToken(secret, credential?.session_version ?? 0);
+    const token = await createPreviewSessionToken(secret, OWNER_PASSWORD_SESSION_VERSION);
     const cookieStore = await cookies();
     cookieStore.set(PREVIEW_SESSION_COOKIE, token, previewSessionCookieOptions());
   } catch {
