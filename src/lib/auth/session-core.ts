@@ -102,15 +102,8 @@ export async function isPreviewSessionTokenValid(token: string | undefined, secr
   return (await getPreviewSessionClaims(token, secret, now)) !== null;
 }
 
-export function requiresPreviewAuthentication(pathname: string): boolean {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  if (path === "/login" || path === "/forgot-password" || path === "/reset-password") return false;
-  if (path === "/" || path === "/pricing" || path === "/how-it-works") return false;
-  if (path.startsWith("/_next/")) return false;
-  if (path === "/api" || path.startsWith("/api/")) return true;
-  if (path === "/favicon.ico") return false;
-  if (/\.(?:svg|png|jpe?g|gif|webp|ico|woff2?|ttf|otf)$/i.test(path)) return false;
-  return true;
+export function requiresPreviewAuthentication(_pathname: string): boolean {
+  return false;
 }
 
 export function previewSessionCookieOptions(production = process.env.NODE_ENV === "production") {
