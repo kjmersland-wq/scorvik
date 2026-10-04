@@ -4,8 +4,8 @@ import { AppHeader } from "@/components/app-header";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Private preview",
-  description: "Sign in to continue.",
+  title: "SCORVIK | Your story, in motion",
+  description: "Find the story in your website and shape it into a film.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -13,7 +13,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body>{authenticated && <AppHeader />}<main className={authenticated ? "app-main" : "login-main"}>{children}</main></body>
+      <body><AppHeader authenticated={authenticated} /><main className="app-main">{children}</main></body>
     </html>
   );
 }

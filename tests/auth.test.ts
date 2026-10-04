@@ -53,11 +53,11 @@ test("the cookie is HTTP-only, same-site, scoped to the host, and secure in prod
   assert.equal(previewSessionCookieOptions(true).secure, true);
 });
 
-test("all application pages and API routes require authentication except login and static assets", () => {
-  for (const path of ["/", "/create", "/projects", "/projects/example-id", "/pricing", "/how-it-works", "/api", "/api/website/analyze", "/anything-else"]) {
+test("studio pages and API routes require authentication while marketing pages are public", () => {
+  for (const path of ["/create", "/projects", "/projects/example-id", "/account/security", "/api", "/api/website/analyze", "/anything-else"]) {
     assert.equal(requiresPreviewAuthentication(path), true, path);
   }
-  for (const path of ["/login", "/login/", "/forgot-password", "/reset-password", "/_next/static/chunks/app.js", "/_next/image/logo.png", "/favicon.ico", "/images/logo.svg"]) {
+  for (const path of ["/", "/pricing", "/how-it-works", "/login", "/login/", "/forgot-password", "/reset-password", "/_next/static/chunks/app.js", "/_next/image/logo.png", "/favicon.ico", "/images/logo.svg"]) {
     assert.equal(requiresPreviewAuthentication(path), false, path);
   }
 });
