@@ -1,15 +1,15 @@
 "use client";
 
-import type { FormEvent } from "react";
 import { useState } from "react";
 import Link from "next/link";
-import { createScene, defaultSettings, demoScenes } from "@/lib/mock-data";
+import { createCreativeBrief, detectBrandProfile } from "@/lib/creative/create-brief";
+import { buildStoryboard } from "@/lib/creative/storyboard-engine";
+import { buildMockAnalysis, createScene, defaultSettings, demoScenes } from "@/lib/mock-data";
 import { saveProject } from "@/lib/projects";
 import type { CreativeBrief, ScenePurpose, SiteAnalysis, StoryScene, VideoFormat, VideoProject, VideoSettings } from "@/types/project";
 import { MusicStudio } from "@/components/music-studio";
 import { platformPresets } from "@/lib/platforms/presets";
 
-const analysisSteps = ["Taking a look around", "Finding what makes you", "Getting to know your offer", "Finding a direction", "Shaping your story", "Putting the first draft together"];
 const formats: VideoFormat[] = ["16:9", "9:16", "1:1", "4:5"];
 const styles = ["Editorial", "Cinematic", "Clean", "Energetic", "Minimal"];
 const purposeLabels: Record<ScenePurpose, string> = { Hook: "The hook", Story: "The story", Product: "The product", Benefit: "The benefit", Proof: "The proof", CTA: "The close" };
@@ -35,15 +35,12 @@ interface CreateStudioProps {
 
 export function CreateStudio({ initialUrl = "", initialSettings = {} }: CreateStudioProps) {
   const [url, setUrl] = useState(initialUrl);
-  const [error, setError] = useState("");
   const [stage, setStage] = useState<Stage>("website");
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null);
   const [creativeBrief, setCreativeBrief] = useState<CreativeBrief | null>(null);
   const [mode, setMode] = useState<"mock" | "real">("mock");
-  const [analyzing, setAnalyzing] = useState(false);
   const [scenes, setScenes] = useState<StoryScene[]>(demoScenes);
   const [settings, setSettings] = useState<VideoSettings>({ ...defaultSettings, ...initialSettings });
-  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [editingScene, setEditingScene] = useState<string | null>(null);
   const [project, setProject] = useState<VideoProject | null>(null);
 
@@ -51,38 +48,26 @@ export function CreateStudio({ initialUrl = "", initialSettings = {} }: CreateSt
     setSettings((current) => ({ ...current, [key]: value }));
   }
 
-  function analyzeWebsite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    const value = url.trim();
-    if (!value) {
-      setError("That link doesn't seem to work yet. Check it and we'll try again.");
-      return;
-    }
-    setAnalyzing(true);
-    setAnalysisProgress(0);
-    const progressTimer = window.setInterval(() => setAnalysisProgress((current) => Math.min(current + 1, analysisSteps.length - 1)), mode === "real" ? 1800 : 320);
-    void fetch("/api/website/analyze", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: value, mode, targetDuration: settings.duration }),
-    }).then(async (response) => {
-      const payload = await response.json() as { error?: string; analysis?: SiteAnalysis; creativeBrief?: CreativeBrief; storyboard?: { scenes: StoryScene[] } };
-      if (!response.ok || !payload.analysis || !payload.creativeBrief || !payload.storyboard) throw new Error(payload.error ?? "We couldn't take a look just now. Check the link and try again.");
-      return payload;
-    }).then((payload) => {
-      window.clearInterval(progressTimer);
-      setAnalysisProgress(analysisSteps.length);
-      setAnalysis(payload.analysis!);
-      setCreativeBrief(payload.creativeBrief!);
-      setScenes(payload.storyboard!.scenes);
-      setUrl(payload.analysis!.url);
-      window.setTimeout(() => setStage("storyboard"), 350);
-    }).catch((cause: unknown) => {
-      window.clearInterval(progressTimer);
-      setAnalysisProgress(0);
-      setError(cause instanceof Error ? cause.message : "We couldn't reach that page just now. Check the link and try again.");
-    }).finally(() => setAnalyzing(false));
+  function showSampleStory(sample: string) {
+    const baseAnalysis = buildMockAnalysis(`https://${sample}`);
+    const sourcedAnalysis: SiteAnalysis = {
+      ...baseAnalysis,
+      source: {
+        submittedUrl: baseAnalysis.url,
+        finalUrl: baseAnalysis.url,
+        fetchedAt: new Date().toISOString(),
+        mode: "mock",
+      },
+    };
+    const enrichedAnalysis = { ...sourcedAnalysis, brandProfile: detectBrandProfile(sourcedAnalysis) };
+    const brief = createCreativeBrief(enrichedAnalysis);
+    const storyboard = buildStoryboard(enrichedAnalysis, brief, { targetDuration: settings.duration });
+
+    setUrl(baseAnalysis.url);
+    setAnalysis(enrichedAnalysis);
+    setCreativeBrief(brief);
+    setScenes(storyboard.scenes);
+    setStage("storyboard");
   }
 
   function changeScene(id: string, patch: Partial<StoryScene>) {
@@ -145,15 +130,13 @@ export function CreateStudio({ initialUrl = "", initialSettings = {} }: CreateSt
       {stage === "website" && <div className="studio-grid">
         <section className="panel panel-pad">
           <div className="panel-head"><div><h2>Start with your website.</h2><small>Paste a link and we’ll take a look.</small></div><span className="tag">{mode === "real" ? "YOUR WEBSITE" : "SAMPLE STORY"}</span></div>
-          <div className="mode-control" role="group" aria-label="Choose how to start"><button className={mode === "mock" ? "selected" : ""} aria-pressed={mode === "mock"} onClick={() => setMode("mock")}>Try a sample</button><button className={mode === "real" ? "selected" : ""} aria-pressed={mode === "real"} onClick={() => setMode("real")}>Use my website</button></div>
-          <form className="url-form" onSubmit={analyzeWebsite}>
-            <label className="url-field"><span className="sr-only">Your website link</span><input type="text" inputMode="url" autoComplete="url" value={url} onChange={(event) => { setUrl(event.target.value); setError(""); }} placeholder="yourwebsite.com" aria-describedby={error ? "url-error" : "url-hint"} /></label>
-            <button className="button" type="submit" disabled={analyzing}>{analyzing ? "Taking a look…" : mode === "real" ? "Understand my website" : "Build a sample story"} <span aria-hidden="true">→</span></button>
+          <div className="mode-control" role="group" aria-label="Choose how to start"><button className={mode === "mock" ? "selected" : ""} aria-pressed={mode === "mock"} onClick={() => setMode("mock")}>Try a sample</button><button className={mode === "real" ? "selected" : ""} aria-pressed={mode === "real"} disabled>Use my website</button></div>
+          <form className="url-form" onSubmit={(event) => event.preventDefault()}>
+            <label className="url-field"><span className="sr-only">Your website link</span><input type="text" inputMode="url" autoComplete="url" value={url} placeholder="yourwebsite.com" disabled aria-describedby="url-hint" /></label>
+            <button className="button" type="submit" disabled>Build a sample story <span aria-hidden="true">→</span></button>
           </form>
-          {error && <p className="error-text" id="url-error" role="alert">{error}</p>}
-          <div className="field-caption" id="url-hint">We’ll find the details that make your brand yours and shape a first draft.</div>
-          <div className="sample-links"><span>OR START WITH A SAMPLE</span>{["northline.studio", "quietform.co", "goodfield.market"].map((sample) => <button key={sample} type="button" onClick={() => setUrl(`https://${sample}`)}>{sample}</button>)}</div>
-          {analyzing && <div className="analysis-panel" aria-live="polite"><div className="analysis-title">{mode === "real" ? "Taking a look around your website" : "Putting together a sample story"}<span>{Math.min(Math.round(analysisProgress / analysisSteps.length * 90), 90)}%</span></div><ul className="analysis-list">{analysisSteps.map((item, index) => <li className={index < analysisProgress ? "done" : ""} key={item}><span className="analysis-check">{index < analysisProgress ? "✓" : "·"}</span>{item}{index === analysisProgress ? "…" : ""}</li>)}</ul></div>}
+          <div className="field-caption" id="url-hint">Preview is open. Adding your own website opens soon.</div>
+          <div className="sample-links"><span>OR START WITH A SAMPLE</span>{["northline.studio", "quietform.co", "goodfield.market"].map((sample) => <button key={sample} type="button" onClick={() => showSampleStory(sample)}>{sample}</button>)}</div>
         </section>
         <aside className="panel panel-pad"><div className="panel-head"><h3>Here’s what we’ll do</h3></div><div className="step"><span className="step-no">01 / TAKE A LOOK</span><h3>Get to know your brand</h3><p>We’ll pick out the words, images and details that feel like you.</p></div><div className="step"><span className="step-no">02 / SHAPE THE STORY</span><h3>Your story, your way</h3><p>Take a look at the first draft and change anything you like.</p></div></aside>
       </div>}
