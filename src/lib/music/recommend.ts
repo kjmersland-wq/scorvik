@@ -12,9 +12,13 @@ export const localMusicFiles = [
   "playful-108-ad.mp3",
   "playful-108-ad-2.mp3",
   "playful-116-ad.mp3",
+  "calm-84-guide.mp3",
   "quiet-72-guide.mp3",
   "quiet-72-guide-2.mp3",
   "quiet-78-guide.mp3",
+  "modern-110-guide.mp3",
+  "modern-110-guide-2.mp3",
+  "modern-110-guide-3.mp3",
   "warm-104-ad.mp3",
   "warm-108-ad.mp3",
 ] as const;
@@ -30,9 +34,13 @@ const durationByFile: Record<(typeof localMusicFiles)[number], number> = {
   "playful-108-ad.mp3": 162,
   "playful-108-ad-2.mp3": 163,
   "playful-116-ad.mp3": 61,
+  "calm-84-guide.mp3": 89,
   "quiet-72-guide.mp3": 177,
   "quiet-72-guide-2.mp3": 177,
   "quiet-78-guide.mp3": 63,
+  "modern-110-guide.mp3": 63,
+  "modern-110-guide-2.mp3": 60,
+  "modern-110-guide-3.mp3": 63,
   "warm-104-ad.mp3": 62,
   "warm-108-ad.mp3": 68,
 };
@@ -40,6 +48,7 @@ const durationByFile: Record<(typeof localMusicFiles)[number], number> = {
 const genreByMood: Record<string, string> = {
   blues: "Blues",
   bright: "Soul / R&B",
+  calm: "Cinematic",
   drive: "Rock",
   modern: "Electronic",
   playful: "Soul / R&B",
@@ -137,6 +146,7 @@ function scoreTrack(track: MusicTrack, input: MusicRecommendationInput, inferred
     Modern: /modern|confident|clean|electronic/,
     Playful: /playful|fun|lively|bright/,
     Quiet: /quiet|calm|measured|gentle|cinematic/,
+    Calm: /calm|quiet|gentle|measured|soft/,
     Warm: /warm|considered|organic|human/,
   };
   let score = moodAliases[track.mood[0]]?.test(moodWords) ? 12 : 0;

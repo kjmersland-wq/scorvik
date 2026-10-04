@@ -39,7 +39,11 @@ test("music ranking is deterministic, brand-sensitive and respects explicit genr
   const bluesMood = bluesOnly.find((item) => item.track.mood[0] === "Blues");
   assert.ok(bluesMood);
   assert.deepEqual([bluesMood.track.id, ...bluesMood.alternatives.map((track) => track.id)].sort(), ["blues-60-ad", "blues-60-ad-2", "blues-65-ad", "blues-65-ad-2"]);
-  assert.deepEqual(recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "instruction" }).map((item) => item.track.usage), ["guide"]);
+  const guideRecommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "instruction" });
+  assert.ok(guideRecommendations.length > 0);
+  assert.ok(guideRecommendations.every((item) => item.track.usage === "guide"));
+  const modernGuide = guideRecommendations.find((item) => item.track.mood[0] === "Modern");
+  assert.equal(modernGuide?.alternatives.length, 2);
   assert.ok(recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert" }).some((item) => item.alternatives.length > 0));
 });
 
@@ -64,8 +68,8 @@ test("music fitting creates gentle endings and warns before unlicensed looping",
   assert.equal(musicGainWithVoiceDucking(0.55, false, true), 0.55);
 });
 
-test("only the 15 local owned royalty-free files are commercially selectable", () => {
-  assert.equal(demoMusicCatalog.length, 15);
+test("only the 19 local owned royalty-free files are commercially selectable", () => {
+  assert.equal(demoMusicCatalog.length, 19);
   assert.deepEqual(demoMusicCatalog.map((track) => track.audioUrl?.replace("/music/", "")).sort(), [...localMusicFiles].sort());
   assert.ok(demoMusicCatalog.every((track) => track.commercialUse && isClearedRoyaltyFreeTrack(track, "youtube")));
   assert.equal(isClearedRoyaltyFreeTrack({ ...demoMusicCatalog[0], audioUrl: "https://audio.example/track.mp3" }, "youtube"), false);
