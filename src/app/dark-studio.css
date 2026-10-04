@@ -638,3 +638,7 @@ body::before {
   transform: none;
   background: url("/favicon-32.png") center / contain no-repeat;
 }
+
+.brand-mark { width: 56px; height: 56px; flex: 0 0 56px; }
+.brand-wordmark { display: block; font-size: 16px; line-height: 1.1; white-space: nowrap; }
+.brand-wordmark small { display: block; }
