@@ -23,6 +23,11 @@ export function hasPreviewCredentials(environment: PreviewEnvironment = process.
   return Boolean(environment.SCORVIK_PREVIEW_EMAIL && environment.SCORVIK_PREVIEW_PASSWORD && hasValidAuthSecret(environment.SCORVIK_AUTH_SECRET));
 }
 
+export async function previewPasswordMatches(password: string, environment: PreviewEnvironment = process.env): Promise<boolean> {
+  const expectedPassword = environment.SCORVIK_PREVIEW_PASSWORD ?? "";
+  return Boolean(expectedPassword && hasValidAuthSecret(environment.SCORVIK_AUTH_SECRET) && await fixedTimeEqual(password, expectedPassword));
+}
+
 export function hasValidAuthSecret(secret: string | undefined): secret is string {
   return Boolean(secret && textEncoder.encode(secret).byteLength >= 32);
 }

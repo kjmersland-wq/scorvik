@@ -13,7 +13,8 @@ export async function isCurrentPreviewSessionToken(
 ): Promise<boolean> {
   if (!hasValidAuthSecret(secret)) return false;
   const claims = await getPreviewSessionClaims(token, secret);
+  if (!claims) return false;
   const email = environment.SCORVIK_PREVIEW_EMAIL?.trim().toLowerCase();
-  if (!claims || !email) return false;
+  if (!email) return claims.sessionVersion === 0;
   return isPreviewSessionCurrent(claims, store === undefined ? await getAuthStore() : store, email);
 }

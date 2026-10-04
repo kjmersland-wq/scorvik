@@ -8,6 +8,7 @@ import {
   previewCredentialsMatch,
   PREVIEW_SESSION_MAX_AGE_SECONDS,
   previewSessionCookieOptions,
+  previewPasswordMatches,
   requiresPreviewAuthentication,
 } from "../src/lib/auth/session-core.ts";
 
@@ -57,4 +58,10 @@ test("all page and API paths pass through without the preview authentication gat
   for (const path of ["/", "/create", "/projects", "/projects/example-id", "/account/security", "/api", "/api/website/analyze", "/pricing", "/how-it-works", "/no", "/no/create", "/no/projects", "/anything-else", "/login", "/forgot-password", "/reset-password", "/_next/static/chunks/app.js", "/_next/image/logo.png", "/favicon.ico", "/images/logo.svg"]) {
     assert.equal(requiresPreviewAuthentication(path), false, path);
   }
+});
+
+test("anonymous preview password compares safely without requiring an email", async () => {
+  assert.equal(await previewPasswordMatches(password, environment), true);
+  assert.equal(await previewPasswordMatches(`${password}x`, environment), false);
+  assert.equal(await previewPasswordMatches(password, { SCORVIK_PREVIEW_PASSWORD: password }), false);
 });

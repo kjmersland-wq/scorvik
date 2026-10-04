@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import {
   createPreviewSessionToken,
   hasValidAuthSecret,
+  previewPasswordMatches,
   PREVIEW_SESSION_COOKIE,
   previewSessionCookieOptions,
 } from "@/lib/auth/session-core";
@@ -66,6 +67,34 @@ export async function signIn(_previousState: SignInState, formData: FormData): P
   }
   if (signedIn) redirect("/");
   return { error: loginError };
+}
+
+export async function signInWithPreviewPassword(_previousState: SignInState, formData: FormData): Promise<SignInState> {
+  const password = formData.get("password");
+  const locale = formData.get("locale") === "no" ? "no" : "en";
+  const error = locale === "no" ? "Det passordet gikk ikke. Prøv igjen." : "That didn’t work. Please try again.";
+  if (typeof password !== "string" || !password || password.length > 1024) return { error };
+
+  try {
+    const secret = process.env.SCORVIK_AUTH_SECRET;
+    if (!hasValidAuthSecret(secret) || !await previewPasswordMatches(password)) return { error };
+
+    const store = await getAuthStore();
+    const requestHeaders = await headers();
+    const address = getClientAddress(requestHeaders);
+    const bucket = await hashRateLimitBucket(secret, "anonymous-preview-login", address);
+    if (!await consumeAuthRateLimit(store, bucket, Date.now(), 15 * 60 * 1000, 10)) return { error };
+
+    const email = process.env.SCORVIK_PREVIEW_EMAIL?.trim().toLowerCase();
+    const credential = store && email ? await store.getCredential(email) : null;
+    const token = await createPreviewSessionToken(secret, credential?.session_version ?? 0);
+    const cookieStore = await cookies();
+    cookieStore.set(PREVIEW_SESSION_COOKIE, token, previewSessionCookieOptions());
+  } catch {
+    return { error };
+  }
+
+  redirect(locale === "no" ? "/no/create" : "/create");
 }
 
 export async function signOut(): Promise<void> {
