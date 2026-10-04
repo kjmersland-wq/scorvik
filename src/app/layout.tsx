@@ -6,6 +6,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "SCORVIK | Your story, in motion",
   description: "Find the story in your website and shape it into a film.",
+  icons: {
+    icon: "/favicon-32.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
