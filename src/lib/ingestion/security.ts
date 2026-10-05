@@ -104,14 +104,14 @@ export function normalizeWebsiteUrl(input: string): URL {
   return url;
 }
 
-export async function resolvePublicAddress(hostname: string, resolver: AddressResolver = async (name) => {
+export async function resolvePublicAddresses(hostname: string, resolver: AddressResolver = async (name) => {
   const addresses = await lookup(name, { all: true, verbatim: true });
   return addresses.map(({ address, family }) => ({ address, family: family as 4 | 6 }));
 }) {
   const plainHostname = hostname.replace(/^\[|\]$/g, "");
   if (isIP(plainHostname)) {
     if (!isPublicAddress(plainHostname)) throw new WebsiteIngestionError("BLOCKED_URL", "We can only take a look at public websites. Try a public link instead.");
-    return { address: plainHostname, family: isIP(plainHostname) as 4 | 6 };
+    return [{ address: plainHostname, family: isIP(plainHostname) as 4 | 6 }];
   }
   let addresses: ResolvedAddress[];
   try {
@@ -122,5 +122,10 @@ export async function resolvePublicAddress(hostname: string, resolver: AddressRe
   if (!addresses.length || addresses.some(({ address }) => !isPublicAddress(address))) {
     throw new WebsiteIngestionError("BLOCKED_URL", "We can only take a look at public websites. Try a public link instead.");
   }
-  return addresses[0];
+  return [...new Map(addresses.map((entry) => [`${entry.family}:${entry.address}`, entry])).values()];
+}
+
+export async function resolvePublicAddress(hostname: string, resolver?: AddressResolver): Promise<ResolvedAddress> {
+  const [address] = await resolvePublicAddresses(hostname, resolver);
+  return address;
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fetchWebsiteHtml } from "../src/lib/ingestion/fetch-html.ts";
+import { WebsiteIngestionError } from "../src/lib/ingestion/security.ts";
 import { parseWebsiteHtml } from "../src/lib/ingestion/parse-html.ts";
 import { createCreativeBrief, detectBrandProfile } from "../src/lib/creative/create-brief.ts";
 import { buildStoryboard, recommendInstructionDuration, validateStoryboard } from "../src/lib/creative/storyboard-engine.ts";
@@ -29,6 +30,56 @@ test("limits redirects and rejects HTTPS downgrade", async () => {
     maxRedirects: 1,
     request: async () => response(302, { location: "/next" }),
   }), { code: "UNAVAILABLE" });
+});
+
+test("retries another validated address when the first address cannot connect", async () => {
+  const attempted: string[] = [];
+  const result = await fetchWebsiteHtml("https://slow-blues.com/", {
+    resolver: async () => [
+      { address: "2606:4700:3031::6815:4b08", family: 6 },
+      { address: "104.21.75.8", family: 4 },
+    ],
+    request: async (_url, address) => {
+      attempted.push(address.address);
+      if (address.family === 6) throw new WebsiteIngestionError("UNAVAILABLE", "network unavailable");
+      return response(200, { "content-type": "text/html" }, "<html><body>Reachable public content with enough text</body></html>");
+    },
+  });
+  assert.deepEqual(attempted, ["2606:4700:3031::6815:4b08", "104.21.75.8"]);
+  assert.equal(result.url, "https://slow-blues.com/");
+});
+
+test("does not attempt a public address if the same DNS answer contains a private address", async () => {
+  let attempted = false;
+  await assert.rejects(fetchWebsiteHtml("https://mixed.example/", {
+    resolver: async () => [
+      { address: "104.21.75.8", family: 4 },
+      { address: "10.0.0.8", family: 4 },
+    ],
+    request: async () => {
+      attempted = true;
+      return response(200, { "content-type": "text/html" });
+    },
+  }), { code: "BLOCKED_URL" });
+  assert.equal(attempted, false);
+});
+
+test("retries another pinned edge after a transient CDN 5xx response", async () => {
+  const attempted: string[] = [];
+  const result = await fetchWebsiteHtml("https://cdn.example/", {
+    resolver: async () => [
+      { address: "104.21.75.8", family: 4 },
+      { address: "172.67.166.61", family: 4 },
+    ],
+    request: async (_url, address) => {
+      attempted.push(address.address);
+      return address.address === "104.21.75.8"
+        ? response(522, { "content-type": "text/html" }, "edge connection timed out")
+        : response(200, { "content-type": "text/html" }, "<html><body>Reachable public content with enough text</body></html>");
+    },
+  });
+  assert.deepEqual(attempted, ["104.21.75.8", "172.67.166.61"]);
+  assert.equal(result.status, 200);
 });
 
 test("rejects non-HTML content, access denials and oversized pages", async () => {

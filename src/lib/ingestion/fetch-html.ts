@@ -2,7 +2,7 @@ import https from "node:https";
 import http from "node:http";
 import type { IncomingHttpHeaders, RequestOptions } from "node:http";
 import type { AddressResolver, ResolvedAddress } from "./security.ts";
-import { normalizeWebsiteUrl, resolvePublicAddress, WebsiteIngestionError } from "./security.ts";
+import { normalizeWebsiteUrl, resolvePublicAddresses, WebsiteIngestionError } from "./security.ts";
 
 export interface HtmlPageResponse {
   status: number;
@@ -17,6 +17,16 @@ export interface FetchHtmlOptions {
   maxRedirects?: number;
   resolver?: AddressResolver;
   request?: (url: URL, address: ResolvedAddress, timeoutMs: number, maxBytes: number) => Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>;
+}
+
+export function createPinnedLookup(address: ResolvedAddress): NonNullable<RequestOptions["lookup"]> {
+  return (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [address]);
+      return;
+    }
+    callback(null, address.address, address.family);
+  };
 }
 
 function timeoutError(): WebsiteIngestionError {
@@ -38,6 +48,7 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
       protocol: url.protocol,
       hostname: url.hostname.replace(/^\[|\]$/g, ""),
       port: url.port || undefined,
+      family: address.family,
       path: `${url.pathname}${url.search}`,
       method: "GET",
       headers: {
@@ -46,7 +57,7 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
         "accept-encoding": "identity",
         connection: "close",
       },
-      lookup: (_hostname, _lookupOptions, callback) => callback(null, address.address, address.family),
+      lookup: createPinnedLookup(address),
       agent: false,
     };
     const outgoing = transport.request(url, options, (incoming) => {
@@ -76,8 +87,15 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
       incoming.on("end", () => resolve({ status, headers, body: Buffer.concat(chunks).toString("utf8") }));
       incoming.on("error", reject);
     });
+    const connectionDeadline = setTimeout(() => outgoing.destroy(new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again.")), Math.min(timeoutMs, 2500));
     const deadline = setTimeout(() => outgoing.destroy(timeoutError()), timeoutMs);
-    outgoing.once("close", () => clearTimeout(deadline));
+    outgoing.once("socket", (socket) => {
+      socket.once(url.protocol === "https:" ? "secureConnect" : "connect", () => clearTimeout(connectionDeadline));
+    });
+    outgoing.once("close", () => {
+      clearTimeout(connectionDeadline);
+      clearTimeout(deadline);
+    });
     outgoing.setTimeout(timeoutMs, () => outgoing.destroy(timeoutError()));
     outgoing.on("error", (error) => {
       if (error instanceof WebsiteIngestionError) reject(error);
@@ -99,15 +117,41 @@ export async function fetchWebsiteHtml(input: string, options: FetchHtmlOptions 
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) throw timeoutError();
-    let address: ResolvedAddress;
-    let response: Awaited<ReturnType<typeof request>>;
+    let addresses: ResolvedAddress[];
     try {
-      address = await withTimeout(resolvePublicAddress(url.hostname, resolver), remainingMs);
-      response = await withTimeout(request(url, address, deadline - Date.now(), maxBytes), deadline - Date.now());
+      addresses = await withTimeout(resolvePublicAddresses(url.hostname, resolver), remainingMs);
     } catch (error) {
       if (error instanceof WebsiteIngestionError) throw error;
       throw new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again.");
     }
+    let response: Awaited<ReturnType<typeof request>> | undefined;
+    let lastRequestError: WebsiteIngestionError | undefined;
+    let lastServerError: Awaited<ReturnType<typeof request>> | undefined;
+    for (const [index, address] of addresses.entries()) {
+      const addressTimeRemaining = deadline - Date.now();
+      if (addressTimeRemaining <= 0) {
+        lastRequestError = timeoutError();
+        break;
+      }
+      try {
+        const candidate = await withTimeout(request(url, address, addressTimeRemaining, maxBytes), addressTimeRemaining);
+        if (candidate.status >= 500 && index < addresses.length - 1) {
+          lastServerError = candidate;
+          continue;
+        }
+        response = candidate;
+        break;
+      } catch (error) {
+        if (error instanceof WebsiteIngestionError) {
+          if (error.code !== "UNAVAILABLE" && error.code !== "TIMEOUT") throw error;
+          lastRequestError = error;
+        } else {
+          lastRequestError = new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again.");
+        }
+      }
+    }
+    response ??= lastServerError;
+    if (!response) throw lastRequestError ?? new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again.");
     if (Buffer.byteLength(response.body, "utf8") > maxBytes) {
       throw new WebsiteIngestionError("RESPONSE_TOO_LARGE", "This page has a lot to take in. Try a simpler page, like your homepage.");
     }
