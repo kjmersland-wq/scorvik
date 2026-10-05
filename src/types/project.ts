@@ -189,6 +189,7 @@ export interface VideoProject {
   title: string;
   url: string;
   createdAt: string;
+  thumbnailUrl?: string;
   analysis: SiteAnalysis;
   scenes: StoryScene[];
   settings: VideoSettings;

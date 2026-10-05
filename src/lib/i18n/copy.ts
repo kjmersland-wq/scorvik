@@ -70,6 +70,7 @@ export const copy = {
       eyebrow: "Your creative library", title: "Your films", description: "Every story you’ve started, kept close at hand.",
       startAnother: "Start another film", secondsUnit: "s", emptyEyebrow: "YOUR FIRST STORY", emptyTitle: "Your next film starts here.",
       emptyDescription: "Start with your website and your first story will be waiting here.", start: "Start with my website",
+      deleteProject: "Delete", confirmDelete: "Delete this saved project? This only removes it from this browser.",
     },
     projectDetail: {
       missingTitle: "We can’t find that story here.", missingDescription: "It may be saved in another browser. Your other projects are still here.", back: "Back to my films",
@@ -188,6 +189,7 @@ export const copy = {
       eyebrow: "Filmverkstedet ditt", title: "Utkastene dine", description: "Historiene du har startet, samlet på ett sted.",
       startAnother: "Lag et nytt utkast", secondsUnit: "sek", emptyEyebrow: "FØRSTE UTKAST", emptyTitle: "Historien begynner her.",
       emptyDescription: "Velg et eksempel og lag ditt første filmutkast.", start: "Se eksemplene",
+      deleteProject: "Slett", confirmDelete: "Slette dette lagrede prosjektet? Det fjernes bare fra denne nettleseren.",
     },
     projectDetail: {
       missingTitle: "Vi finner ikke dette utkastet.", missingDescription: "Det kan være lagret i en annen nettleser. De andre utkastene dine ligger her.", back: "Tilbake til utkastene",
