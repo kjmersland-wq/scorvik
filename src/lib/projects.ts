@@ -39,6 +39,19 @@ export function getProjectThumbnail(project: Pick<VideoProject, "thumbnailUrl" |
   return safeImageUrl(project.thumbnailUrl) ?? selectProjectThumbnail(project);
 }
 
+export function getProjectVideoUrl(project: Pick<VideoProject, "renderJob">): string | undefined {
+  const job = project.renderJob;
+  if (job?.mode !== "real" || job.status !== "complete" || !job.outputUrl) return undefined;
+  try {
+    const url = new URL(job.outputUrl);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.pathname.toLowerCase().endsWith(".mp4")
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function persistProjects(projects: VideoProject[]): boolean {
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(projects));

@@ -195,6 +195,7 @@ export interface VideoProject {
   settings: VideoSettings;
   version: number;
   creativeBrief?: CreativeBrief;
+  renderJob?: RenderJob;
   platformVersions?: Array<{ presetId: string; scenes: StoryScene[]; status: "draft" | "rendering" | "complete" }>;
 }
 
