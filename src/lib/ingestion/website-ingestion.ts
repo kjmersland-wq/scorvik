@@ -9,7 +9,11 @@ export interface WebsiteIngestionResult {
 }
 
 export class WebsiteIngestionService {
-  constructor(private readonly fetchOptions: FetchHtmlOptions = {}) {}
+  private readonly fetchOptions: FetchHtmlOptions;
+
+  constructor(fetchOptions: FetchHtmlOptions = {}) {
+    this.fetchOptions = fetchOptions;
+  }
 
   async analyze(input: string): Promise<WebsiteIngestionResult> {
     const fetched = await fetchWebsiteHtml(input, this.fetchOptions);

@@ -26,6 +26,7 @@ export interface StoryScene {
   voiceover: string;
   transition: string;
   visual: string;
+  visualSource?: "website-image" | "open-graph" | "not-detected";
   cta?: string;
   musicCue?: string;
   soundCue?: string;
@@ -60,17 +61,22 @@ export interface SiteAnalysis {
 
 export interface BrandProfile {
   name: string;
-  category: "saas" | "ecommerce" | "restaurant" | "travel" | "service" | "content" | "other";
+  category: "saas" | "ecommerce" | "restaurant" | "travel" | "hotel-travel" | "tourism" | "local-service" | "professional-service" | "health-wellness" | "product-brand" | "service" | "content" | "media" | "other";
   productOrService: string;
   tone: string[];
   colors: string[];
   evidence: string[];
   confidence: Confidence;
+  targetAudience?: string[];
+  valueProposition?: string;
+  callToAction?: string;
 }
 
 export interface CreativeBrief {
+  objective: string;
   brand: string;
   productOrService: string;
+  valueProposition: string;
   targetAudience: string[];
   coreMessage: string;
   keyBenefits: string[];
@@ -97,6 +103,7 @@ export interface MusicTrack {
   title: string;
   artist: string;
   source: string;
+  sourceType?: "scorvik-original" | "pixabay" | "other";
   sourceUrl: string;
   audioUrl: string | null;
   duration: number;
@@ -104,16 +111,20 @@ export interface MusicTrack {
   subgenre: string;
   style: string[];
   mood: string[];
-  energy: number;
-  tempoBpm: number;
+  tags?: string[];
+  energy: number | null;
+  tempoBpm: number | null;
   instrumentation: string[];
   era: string;
   vocals: boolean;
   instrumental: boolean;
   useCases: string[];
   usage?: "ad" | "guide";
+  voiceoverSuitable?: boolean;
+  language?: string | null;
   brandFit: string[];
   commercialUse: boolean;
+  metadataStatus?: "demo" | "owner-supplied" | "verified";
   allowedPlatforms: string[];
   licenseType: string;
   attributionRequired: boolean;

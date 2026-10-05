@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createCreativeBrief, detectBrandProfile } from "@/lib/creative/create-brief";
 import { buildStoryboard } from "@/lib/creative/storyboard-engine";
@@ -58,6 +58,8 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   const pacingLabels = locale === "no" ? { measured: "Rolig", balanced: "Jevnt", fast: "Raskt" } : { measured: "Unhurried", balanced: "Easygoing", fast: "Lively" };
   const transitions = locale === "no" ? ["Rolig åpning", "Mykt klipp", "Matchklipp", "Forsiktig panorering", "Overtoning", "Fade ut"] : ["Slow reveal", "Soft cut", "Match cut", "Gentle pan", "Dissolve", "Fade out"];
   const [url, setUrl] = useState(initialUrl);
+  const [analysisError, setAnalysisError] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [stage, setStage] = useState<Stage>("website");
   const [analysis, setAnalysis] = useState<SiteAnalysis | null>(null);
   const [creativeBrief, setCreativeBrief] = useState<CreativeBrief | null>(null);
@@ -75,6 +77,46 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
 
   function updateSetting<Key extends keyof VideoSettings>(key: Key, value: VideoSettings[Key]) {
     setSettings((current) => ({ ...current, [key]: value }));
+  }
+
+  async function analyzeUrl(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAnalysisError("");
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch("/api/website/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url,
+          mode: filmMode,
+          duration: settings.duration,
+          platform: settings.platformPresetIds?.[0] ?? "youtube",
+          language: settings.language,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setAnalysisError(typeof result.error?.message === "string" ? result.error.message : text.urlHint);
+        return;
+      }
+      const nextAnalysis = result.analysis as SiteAnalysis;
+      const nextBrief = result.brief as CreativeBrief;
+      const nextScenes = result.storyboard.scenes as StoryScene[];
+      setAnalysis(nextAnalysis);
+      setCreativeBrief(nextBrief);
+      setScenes(nextScenes);
+      setSettings((current) => ({
+        ...current,
+        duration: result.storyboard.totalDuration,
+        musicTrackId: result.music[0]?.track?.id ?? null,
+      }));
+      setStage("storyboard");
+    } catch {
+      setAnalysisError(text.urlHint);
+    } finally {
+      setIsAnalyzing(false);
+    }
   }
 
   function showSampleStory(sample: string) {
@@ -184,8 +226,9 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       {stage === "website" && <div className="studio-grid">
         <section className="panel panel-pad">
           <div className="panel-head"><div><h2>{text.websitePanel}</h2><small>{text.websiteHelp}</small></div><span className="tag">{text.sampleStory}</span></div>
-          <div className="url-form"><label className="url-field"><span className="sr-only">{locale === "no" ? "Nettsideadresse" : "Website URL"}</span><input type="url" inputMode="url" autoComplete="url" value={url} placeholder="yourwebsite.com" disabled aria-describedby="url-hint" /></label></div>
+          <form className="url-form" onSubmit={analyzeUrl}><label className="url-field"><span className="sr-only">{locale === "no" ? "Nettsideadresse" : "Website URL"}</span><input type="url" inputMode="url" autoComplete="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="yourwebsite.com" disabled={isAnalyzing} aria-describedby="url-hint" /></label><button className="button button-light button-small" type="submit" disabled={isAnalyzing || !url.trim()}>{isAnalyzing ? (locale === "no" ? "Analyserer…" : "Analyzing…") : (locale === "no" ? "Analyser nettside" : "Analyze website")}</button></form>
           <div className="field-caption" id="url-hint">{text.urlHint}</div>
+          {analysisError && <p className="field-caption" role="alert">{analysisError}</p>}
           <div className="mode-control" role="group" aria-label={locale === "no" ? "Velg filmtype" : "Choose film type"}><button className={filmMode === "advert" ? "selected" : ""} aria-pressed={filmMode === "advert"} onClick={() => { setFilmMode("advert"); updateSetting("mode", "advert"); updateSetting("duration", 30); }}>{text.modes.advert}</button><button className={filmMode === "instruction" ? "selected" : ""} aria-pressed={filmMode === "instruction"} onClick={() => { const duration = recommendInstructionDuration(4, locale).seconds; setFilmMode("instruction"); updateSetting("mode", "instruction"); updateSetting("duration", duration); }}>{text.modes.instruction}</button></div>
           <label className="settings-section"><input type="checkbox" checked={showTextOnScreen} onChange={(event) => { setShowTextOnScreen(event.target.checked); updateSetting("showTextOnScreen", event.target.checked); }} /> {text.textToggle}: {showTextOnScreen ? text.textOn : text.textOff}</label>
           <p className="field-caption">{suggestion}</p>
@@ -217,7 +260,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="settings-section"><label htmlFor="language">{text.language}</label><select id="language" value={settings.language} onChange={(event) => { const language = event.target.value; updateSetting("language", language); updateSetting("voice", language === "Norsk" ? text.voices.no[0] : text.voices.en[0]); }}>{text.languageOptions.map((language) => <option key={language}>{language}</option>)}</select></div>
           <div className="settings-section"><label htmlFor="voice">{text.voice}</label><select id="voice" value={settings.voice} onChange={(event) => updateSetting("voice", event.target.value)}>{(settings.language === "Norsk" ? text.voices.no : text.voices.en).map((voice) => <option key={voice}>{voice}</option>)}</select></div>
           <div className="settings-section"><label>{text.style}</label><div className="choice-row">{styles.map((style, index) => <button key={style} className={`choice ${settings.style === style ? "selected" : ""}`} onClick={() => updateSetting("style", style)}>{styleLabels[index]}</button>)}</div></div>
-          <div className="settings-section" id="music"><MusicStudio locale={locale} mode={filmMode} analysis={analysis} brief={creativeBrief ?? { brand: analysis.brand, productOrService: "", targetAudience: [], coreMessage: analysis.description, keyBenefits: analysis.sellingPoints, tone: ["modern"], visualStyle: settings.style, suggestedHook: analysis.title, callToAction: "Explore", suggestedPacing: "balanced", suggestedMusicDirection: "Modern", suggestedVoiceDirection: "Clear", recommendedPlatforms: [], evidence: [], confidence: "low" }} duration={settings.duration} selectedTrackId={settings.musicTrackId ?? null} onSelect={(trackId) => updateSetting("musicTrackId", trackId)}/></div>
+          <div className="settings-section" id="music"><MusicStudio locale={locale} mode={filmMode} analysis={analysis} brief={creativeBrief ?? { objective: "Present the clearest information found on the website.", brand: analysis.brand, productOrService: "", valueProposition: analysis.description, targetAudience: [], coreMessage: analysis.description, keyBenefits: analysis.sellingPoints, tone: ["modern"], visualStyle: settings.style, suggestedHook: analysis.title, callToAction: "", suggestedPacing: "balanced", suggestedMusicDirection: "Modern", suggestedVoiceDirection: "Clear", recommendedPlatforms: [], evidence: [], confidence: "low" }} duration={settings.duration} selectedTrackId={settings.musicTrackId ?? null} onSelect={(trackId) => updateSetting("musicTrackId", trackId)}/></div>
           <div className="settings-section"><label>{text.musicFeel}</label><p>{musicDirection}</p><small>{text.noLicensedMusic}</small></div>
           <div className="settings-section mixer-section"><label>{text.adjustSound}</label>{([[text.voiceLevel, "voice", 0.8], [text.musicLevel, "music", 0.55], [text.sceneSounds, "sfx", 0.25]] as const).map(([label, key, defaultValue]) => <div className="mixer-row" key={key}><span>{label}</span><input aria-label={`${label} level`} type="range" min="0" max="1" step="0.05" value={settings.audioMix?.[key].volume ?? defaultValue} onChange={(event) => updateSetting("audioMix", { ...(settings.audioMix ?? { voice: { volume: 0.8, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, music: { volume: 0.55, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, sfx: { volume: 0.25, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, jingle: { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, duckMusicUnderVoice: true }), [key]: { ...(settings.audioMix?.[key] ?? { volume: defaultValue, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }), volume: Number(event.target.value) } })}/><b>{Math.round((settings.audioMix?.[key].volume ?? defaultValue) * 100)}%</b></div>)}{filmMode === "advert" && <div className="mixer-row"><span>{text.closingSound}</span><input aria-label={`${text.closingSound} level`} type="range" min="0" max="1" step="0.05" value={settings.audioMix?.jingle.volume ?? 0.35} onChange={(event) => updateSetting("audioMix", { ...(settings.audioMix ?? { voice: { volume: 0.8, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, music: { volume: 0.55, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, sfx: { volume: 0.25, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, jingle: { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, duckMusicUnderVoice: true }), jingle: { ...(settings.audioMix?.jingle ?? { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }), volume: Number(event.target.value) } })}/><b>{Math.round((settings.audioMix?.jingle.volume ?? 0.35) * 100)}%</b></div>}<small>{text.mixNote}</small></div>
           <div className="settings-footer"><button className="button" disabled={!scenes.length} onClick={beginRender}>{text.makeFilm} <span aria-hidden="true">→</span></button><p>{text.savedPreview}</p></div>

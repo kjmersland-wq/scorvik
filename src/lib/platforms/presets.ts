@@ -23,6 +23,30 @@ export function getPlatformPresets(platform: string): PlatformPreset[] {
   return platformPresets.filter((preset) => preset.platform.toLowerCase() === platform.toLowerCase());
 }
 
+export function validatePlatformOutput(
+  preset: PlatformPreset,
+  output: { width: number; height: number; duration: number; captionsEnabled?: boolean },
+): string[] {
+  const issues: string[] = [];
+  if (!Number.isInteger(output.width) || !Number.isInteger(output.height) || output.width !== preset.width || output.height !== preset.height) {
+    issues.push("dimensions must match the platform preset");
+  }
+  if (output.width <= 0 || output.height <= 0 || output.width * Number(preset.aspectRatio.split(":")[1]) !== output.height * Number(preset.aspectRatio.split(":")[0])) {
+    issues.push("aspect ratio does not match the platform preset");
+  }
+  if (!Number.isFinite(output.duration) || output.duration < preset.recommendedDuration.min || output.duration > preset.recommendedDuration.max) {
+    issues.push("duration is outside the recommended platform range");
+  }
+  for (const area of [preset.safeArea, preset.textSafeArea]) {
+    if (Object.values(area).some((value) => !Number.isFinite(value) || value < 0 || value >= 0.5)) {
+      issues.push("safe-area values are invalid");
+      break;
+    }
+  }
+  if (preset.captionBehavior === "burn-in" && output.captionsEnabled !== true) issues.push("captions are required for this preset");
+  return issues;
+}
+
 export function customPlatformPreset(format: VideoFormat, width: number, height: number): PlatformPreset {
   return { id: `custom-${width}x${height}`, platform: "Custom", format, width, height, aspectRatio: `${width}:${height}`, recommendedDuration: { min: 6, max: 60 }, safeArea, textSafeArea: safeArea, captionBehavior: "optional" };
 }

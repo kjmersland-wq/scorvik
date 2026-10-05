@@ -19,6 +19,18 @@ export interface FetchHtmlOptions {
   request?: (url: URL, address: ResolvedAddress, timeoutMs: number, maxBytes: number) => Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>;
 }
 
+function timeoutError(): WebsiteIngestionError {
+  return new WebsiteIngestionError("TIMEOUT", "That page is taking a little while to respond. Try again in a moment.");
+}
+
+function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(timeoutError()), timeoutMs);
+  });
+  return Promise.race([operation, timeout]).finally(() => clearTimeout(timer));
+}
+
 function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, maxBytes: number) {
   return new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>((resolve, reject) => {
     const transport = url.protocol === "https:" ? https : http;
@@ -64,7 +76,9 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
       incoming.on("end", () => resolve({ status, headers, body: Buffer.concat(chunks).toString("utf8") }));
       incoming.on("error", reject);
     });
-    outgoing.setTimeout(timeoutMs, () => outgoing.destroy(new WebsiteIngestionError("TIMEOUT", "That page is taking a little while to respond. Try again in a moment.")));
+    const deadline = setTimeout(() => outgoing.destroy(timeoutError()), timeoutMs);
+    outgoing.once("close", () => clearTimeout(deadline));
+    outgoing.setTimeout(timeoutMs, () => outgoing.destroy(timeoutError()));
     outgoing.on("error", (error) => {
       if (error instanceof WebsiteIngestionError) reject(error);
       else reject(new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again."));
@@ -74,16 +88,26 @@ function requestPinned(url: URL, address: ResolvedAddress, timeoutMs: number, ma
 }
 
 export async function fetchWebsiteHtml(input: string, options: FetchHtmlOptions = {}): Promise<HtmlPageResponse> {
-  const timeoutMs = options.timeoutMs ?? 8000;
+  const timeoutMs = Math.max(1, options.timeoutMs ?? 8000);
   const maxBytes = options.maxBytes ?? 1_500_000;
   const maxRedirects = options.maxRedirects ?? 4;
   const resolver = options.resolver;
   const request = options.request ?? requestPinned;
+  const deadline = Date.now() + timeoutMs;
   let url = normalizeWebsiteUrl(input);
 
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
-    const address = await resolvePublicAddress(url.hostname, resolver);
-    const response = await request(url, address, timeoutMs, maxBytes);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) throw timeoutError();
+    let address: ResolvedAddress;
+    let response: Awaited<ReturnType<typeof request>>;
+    try {
+      address = await withTimeout(resolvePublicAddress(url.hostname, resolver), remainingMs);
+      response = await withTimeout(request(url, address, deadline - Date.now(), maxBytes), deadline - Date.now());
+    } catch (error) {
+      if (error instanceof WebsiteIngestionError) throw error;
+      throw new WebsiteIngestionError("UNAVAILABLE", "We couldn't reach that page just now. Check the link and try again.");
+    }
     if (Buffer.byteLength(response.body, "utf8") > maxBytes) {
       throw new WebsiteIngestionError("RESPONSE_TOO_LARGE", "This page has a lot to take in. Try a simpler page, like your homepage.");
     }

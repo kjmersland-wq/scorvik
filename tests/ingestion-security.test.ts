@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isPublicAddress, normalizeWebsiteUrl, resolvePublicAddress, WebsiteIngestionError } from "../src/lib/ingestion/security.ts";
+import { fetchWebsiteHtml } from "../src/lib/ingestion/fetch-html.ts";
 
 test("accepts ordinary public website URLs and normalizes bare domains", () => {
   assert.equal(normalizeWebsiteUrl("example.com/path#section").href, "https://example.com/path");
@@ -34,4 +35,15 @@ test("rejects a hostname whose DNS answers include any private destination", asy
 test("pins the selected address from a public DNS answer", async () => {
   const address = await resolvePublicAddress("example.com", async () => [{ address: "93.184.216.34", family: 4 }]);
   assert.deepEqual(address, { address: "93.184.216.34", family: 4 });
+});
+
+test("applies a hard timeout when DNS or a response stalls", async () => {
+  await assert.rejects(
+    fetchWebsiteHtml("https://public.example", {
+      timeoutMs: 10,
+      resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+      request: async () => new Promise(() => {}),
+    }),
+    { code: "TIMEOUT" },
+  );
 });
