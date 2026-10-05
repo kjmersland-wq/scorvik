@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deleteProject, getProject, readProjects, saveProject, selectProjectThumbnail, subscribeProjects } from "../src/lib/projects.ts";
+import { deleteProject, getProject, getProjectThumbnail, readProjects, saveProject, selectProjectThumbnail, subscribeProjects } from "../src/lib/projects.ts";
 import type { SiteAnalysis, StoryScene, VideoProject } from "../src/types/project.ts";
 
 const scene = (id: string, visual: string, order = 0, visualSource?: StoryScene["visualSource"]): StoryScene => ({
@@ -58,6 +58,8 @@ test("selects the sourced primary scene image, then OG, then a non-logo extracte
   const second = makeProject("second", site, [scene("primary-2", "https://cdn.example.com/story.jpg", 0, "website-image")]);
   assert.equal(selectProjectThumbnail(first), "https://cdn.example.com/story.jpg");
   assert.equal(selectProjectThumbnail(second), "https://cdn.example.com/story.jpg");
+  assert.equal(getProjectThumbnail({ ...first, thumbnailUrl: "https://cdn.example.com/persisted.jpg" }), "https://cdn.example.com/persisted.jpg");
+  assert.equal(getProjectThumbnail(first), "https://cdn.example.com/story.jpg");
   assert.equal(selectProjectThumbnail(makeProject("og", site, [])), "https://cdn.example.com/og.jpg");
   assert.equal(selectProjectThumbnail(makeProject("image", analysis({ images: site.images, logoCandidates: site.logoCandidates }), [])), "https://cdn.example.com/product.jpg");
   assert.equal(selectProjectThumbnail(makeProject("empty", analysis(), [])), undefined);

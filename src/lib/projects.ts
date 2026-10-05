@@ -35,6 +35,10 @@ export function selectProjectThumbnail(project: Pick<VideoProject, "analysis" | 
   return safeImageUrl(relevantImage);
 }
 
+export function getProjectThumbnail(project: Pick<VideoProject, "thumbnailUrl" | "analysis" | "scenes">): string | undefined {
+  return safeImageUrl(project.thumbnailUrl) ?? selectProjectThumbnail(project);
+}
+
 function persistProjects(projects: VideoProject[]): boolean {
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(projects));
