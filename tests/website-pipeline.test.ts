@@ -121,27 +121,80 @@ test("generates an evidence-conditioned advertising structure and target duratio
   const enriched = { ...restaurant, brandProfile: profile };
   const brief = createCreativeBrief(enriched);
   const storyboard = buildStoryboard(enriched, brief, { targetDuration: 20, idFactory: (() => { let id = 0; return () => `scene-${++id}`; })() });
-  assert.equal(storyboard.scenes.length, 3);
+  assert.equal(storyboard.scenes.length, 4);
   assert.equal(storyboard.totalDuration, 20);
   assert.equal(storyboard.scenes.at(-1)?.cta, brief.callToAction);
   assert.ok(!storyboard.scenes.some((scene) => scene.purpose === "Proof"));
   const saas = { ...enriched, brandProfile: { ...profile, category: "saas" as const } };
   const saasStory = buildStoryboard(saas, createCreativeBrief(saas), { targetDuration: 20 });
-  assert.deepEqual(saasStory.scenes.map((scene) => scene.purpose), ["Hook", "Product", "CTA"]);
-  assert.equal(saasStory.scenes.length, 3);
-  assert.equal(buildStoryboard(saas, createCreativeBrief(saas), { targetDuration: 60 }).totalDuration, 30);
+  assert.equal(saasStory.scenes[0]?.purpose, "Hook");
+  assert.equal(saasStory.scenes.at(-1)?.purpose, "CTA");
+  assert.equal(saasStory.scenes.length, 4);
+  assert.equal(saasStory.totalDuration, 20);
+  assert.equal(buildStoryboard(saas, createCreativeBrief(saas), { targetDuration: 60 }).totalDuration, 60);
 });
 
 test("instruction stories keep one scene per ordered step and explain the recommended duration", () => {
   const site = parseWebsiteHtml("<html><head><title>Quietform</title></head><body><h1>Work calmly</h1><ol><li>Create a workspace</li><li>Invite your team</li><li>Set up a workflow</li><li>Review the result</li></ol></body></html>", "https://quietform.example/");
-  const brief = createCreativeBrief(site);
+  const brief = createCreativeBrief(site, { mode: "instruction", targetDuration: recommendInstructionDuration(site.steps?.length ?? 0).seconds });
   const storyboard = buildStoryboard(site, brief, { mode: "instruction", locale: "no" });
-  assert.deepEqual(storyboard.scenes.map((scene) => scene.headline), site.steps?.map((step) => step.title));
-  assert.ok(storyboard.scenes.every((scene) => scene.purpose === "Step"));
+  assert.equal(storyboard.scenes[0]?.headline, "Work calmly");
+  assert.deepEqual(storyboard.scenes.filter((scene) => scene.purpose === "Step").map((scene) => scene.headline), site.steps?.map((step) => step.title));
   assert.equal(storyboard.totalDuration, 60);
   assert.match(storyboard.rationale, /4 steg/);
   assert.deepEqual(recommendInstructionDuration(1, "no"), { seconds: 25, rationale: "Ett steg, omtrent 25 sekunder." });
   assert.equal(recommendInstructionDuration(7, "no").seconds, 90);
+});
+
+test("brief and storyboard honor every supported promotional duration with distinct evidence-led scenes", () => {
+  const headings = Array.from({ length: 16 }, (_, index) => `<h2>Stage ${index + 1}: ${["Plan work clearly", "Keep records together", "Review changes quickly", "Coordinate a reliable handoff"][index % 4]} ${index + 1}</h2><p>Distinct source detail ${index + 1} explains how this part of the service works for the customer in everyday use.</p>`).join("");
+  const steps = Array.from({ length: 10 }, (_, index) => `<li>Step ${index + 1}: complete a distinct task and verify the result before continuing.</li>`).join("");
+  const html = `<html><head><title>Northstar Operations</title><meta name="description" content="A documented operations platform for teams that need clear, reliable workflows."></head><body><h1>Make team operations clearer</h1>${headings}<ol>${steps}</ol><p>Trusted by 2500+ teams.</p><a href="/start">Get started</a></body></html>`;
+  const site = parseWebsiteHtml(html, "https://northstar.example/");
+  const durations = [15, 20, 30, 45, 60, 90, 120, 180];
+  let previousSceneCount = 0;
+  for (const duration of durations) {
+    const brief = createCreativeBrief(site, { mode: "advert", targetDuration: duration });
+    const storyboard = buildStoryboard(site, brief, { mode: "advert", targetDuration: duration, idFactory: (() => { let id = 0; return () => `promo-${duration}-${++id}`; })() });
+    assert.equal(brief.targetDuration, duration);
+    assert.equal(brief.durationMode, "advert");
+    assert.ok(brief.durationGuidance.length > 0);
+    assert.equal(storyboard.totalDuration, duration);
+    assert.equal(storyboard.durationWithinTolerance, true);
+    assert.deepEqual(validateStoryboard(storyboard), []);
+    assert.ok(storyboard.scenes.length > previousSceneCount);
+    assert.equal(new Set(storyboard.scenes.map((scene) => scene.headline.toLowerCase())).size, storyboard.scenes.length);
+    assert.equal(storyboard.scenes[0]?.purpose, "Hook");
+    assert.equal(storyboard.scenes.at(-1)?.purpose, "CTA");
+    previousSceneCount = storyboard.scenes.length;
+  }
+});
+
+test("instructional duration recommendation follows extracted steps and preserves ordered steps", () => {
+  const headings = Array.from({ length: 16 }, (_, index) => `<h2>Reference detail ${index + 1}</h2><p>Additional verified detail ${index + 1} explains a separate part of the workflow and its intended outcome.</p>`).join("");
+  const steps = Array.from({ length: 10 }, (_, index) => `<li>Step ${index + 1}: perform a unique action and check its completion state.</li>`).join("");
+  const site = parseWebsiteHtml(`<html><head><title>Workflow Guide</title><meta name="description" content="A guided process for completing a multi-stage workflow."></head><body><h1>Complete the workflow from start to finish</h1>${headings}<ol>${steps}</ol><a href="/start">Get started</a></body></html>`, "https://guide.example/");
+  const brief = createCreativeBrief(site, { mode: "instruction", targetDuration: recommendInstructionDuration(site.steps?.length ?? 0).seconds });
+  const storyboard = buildStoryboard(site, brief, { mode: "instruction" });
+  const stepScenes = storyboard.scenes.filter((scene) => scene.purpose === "Step");
+  assert.equal(brief.durationMode, "instruction");
+  assert.equal(brief.targetDuration, 120);
+  assert.equal(storyboard.requestedDuration, 120);
+  assert.equal(storyboard.totalDuration, 120);
+  assert.equal(storyboard.durationWithinTolerance, true);
+  assert.deepEqual(stepScenes.map((scene) => scene.headline), site.steps?.map((step) => step.title));
+  assert.equal(storyboard.scenes.at(-1)?.purpose, "CTA");
+});
+
+test("sparse source content is shortened with an explicit duration warning instead of padded scenes", () => {
+  const site = parseWebsiteHtml("<html><head><title>Quiet Place</title></head><body><h1>A quiet place to work</h1></body></html>", "https://quiet.example/");
+  const brief = createCreativeBrief(site, { mode: "advert", targetDuration: 180 });
+  const storyboard = buildStoryboard(site, brief, { mode: "advert", targetDuration: 180 });
+  assert.ok(storyboard.totalDuration < 180);
+  assert.equal(storyboard.durationWithinTolerance, false);
+  assert.match(storyboard.rationale, /shortened from 180 seconds/);
+  assert.ok(validateStoryboard(storyboard).includes("duration outside requested tolerance"));
+  assert.equal(new Set(storyboard.scenes.map((scene) => scene.headline)).size, storyboard.scenes.length);
 });
 
 test("classifies requested business categories from explicit site language", () => {
@@ -183,6 +236,9 @@ test("the full deterministic pipeline ingests a fixture and returns a sourced br
 
   assert.equal(result.source.mode, "real");
   assert.equal(result.analysis.brandProfile?.category, "restaurant");
+  assert.equal(result.brief.targetDuration, 20);
+  assert.equal(result.storyboard.requestedDuration, 20);
+  assert.equal(result.storyboard.durationWithinTolerance, true);
   assert.ok(result.brief.evidence.length > 0);
   assert.equal(result.storyboard.totalDuration, result.storyboard.scenes.reduce((sum, scene) => sum + scene.duration, 0));
   assert.deepEqual(result.storyboard.scenes.map((scene) => scene.purpose), ["Hook", "Product", "Proof", "CTA"]);

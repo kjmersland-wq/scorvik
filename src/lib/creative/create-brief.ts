@@ -1,4 +1,4 @@
-import type { BrandProfile, CreativeBrief, SiteAnalysis } from "@/types/project";
+import type { BrandProfile, CreativeBrief, FilmMode, SiteAnalysis } from "@/types/project";
 
 const categoryRules: Array<[BrandProfile["category"], RegExp]> = [
   ["restaurant", /restaurant|cafe|café|menu|reservation|dining|food|dish|chef|eatery|bar\b/],
@@ -52,13 +52,37 @@ function extractAudience(text: string): string[] {
   return [...new Set(matches.map((match) => match[1].trim()).filter(Boolean))].slice(0, 4);
 }
 
-export function createCreativeBrief(analysis: SiteAnalysis): CreativeBrief {
+export function createCreativeBrief(
+  analysis: SiteAnalysis,
+  options: { mode?: FilmMode; targetDuration?: number } = {},
+): CreativeBrief {
   const profile = analysis.brandProfile ?? detectBrandProfile(analysis);
   const keyBenefits = analysis.sellingPoints.slice(0, 5);
   const firstHeadline = analysis.headings?.[0] || analysis.title;
   const coreMessage = analysis.description || firstHeadline;
   const extractedAudience = profile.targetAudience ?? [];
   const cta = analysis.callsToAction?.[0] ?? "";
+  const durationMode = options.mode ?? "advert";
+  const targetDuration = [15, 20, 30, 45, 60, 90, 120, 180].includes(options.targetDuration ?? 30)
+    ? options.targetDuration ?? 30
+    : 30;
+  const durationGuidance = durationMode === "instruction"
+    ? targetDuration <= 30
+      ? "Prioritize the necessary steps; keep each scene actionable and omit optional detail."
+      : targetDuration <= 60
+        ? "Show the steps in order with enough time for each essential action."
+        : targetDuration <= 90
+          ? "Develop the walkthrough with relevant setup, ordered steps, and a clear finish."
+          : "Use the available steps and relevant supporting information for a detailed walkthrough; do not add unverified steps."
+    : targetDuration <= 20
+      ? "Keep the promotion concise: opening, clearest offer, and one next step."
+      : targetDuration <= 30
+        ? "Tell a concise promotional story with a clear opening, offer, and close."
+        : targetDuration <= 60
+          ? "Develop the offer with distinct supported benefits or proof before the close."
+          : targetDuration <= 90
+            ? "Add depth using distinct source details, supported benefits, and proof without repeating the core message."
+            : "Build a detailed story from distinct website evidence; use longer duration only where the source supports more scenes.";
   const suggestedMusicDirection: Record<BrandProfile["category"], string> = {
     saas: "Modern, minimal electronic; confident and clean",
     ecommerce: "Contemporary, tactile and brand-led",
@@ -94,6 +118,9 @@ export function createCreativeBrief(analysis: SiteAnalysis): CreativeBrief {
   };
   return {
     objective: objectives[profile.category],
+    durationMode,
+    targetDuration,
+    durationGuidance,
     brand: profile.name,
     productOrService: profile.productOrService,
     valueProposition: profile.valueProposition ?? coreMessage,

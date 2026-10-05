@@ -1,5 +1,5 @@
 import { createCreativeBrief, detectBrandProfile } from "../creative/create-brief.ts";
-import { buildStoryboard } from "../creative/storyboard-engine.ts";
+import { buildStoryboard, recommendInstructionDuration } from "../creative/storyboard-engine.ts";
 import { recommendMusic } from "../music/recommend.ts";
 import { getPlatformPreset } from "../platforms/presets.ts";
 import { WebsiteIngestionService } from "../ingestion/website-ingestion.ts";
@@ -23,11 +23,13 @@ export async function analyzeWebsite(
   const { source, analysis: extracted } = await ingestion.analyze(url);
   const brandProfile = detectBrandProfile(extracted);
   const analysis = { ...extracted, brandProfile };
-  const brief = createCreativeBrief(analysis);
   const mode = options.mode ?? "advert";
+  const instructionCount = analysis.steps?.length || analysis.headings?.length || 1;
+  const targetDuration = options.duration ?? (mode === "instruction" ? recommendInstructionDuration(instructionCount).seconds : 30);
+  const brief = createCreativeBrief(analysis, { mode, targetDuration });
   const storyboard = buildStoryboard(analysis, brief, {
     mode,
-    targetDuration: options.duration,
+    targetDuration,
     idFactory: (() => {
       let index = 0;
       return () => `scene-${++index}`;

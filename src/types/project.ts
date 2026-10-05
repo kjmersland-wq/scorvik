@@ -74,6 +74,9 @@ export interface BrandProfile {
 
 export interface CreativeBrief {
   objective: string;
+  durationMode: FilmMode;
+  targetDuration: number;
+  durationGuidance: string;
   brand: string;
   productOrService: string;
   valueProposition: string;
@@ -95,6 +98,9 @@ export interface CreativeBrief {
 export interface Storyboard {
   scenes: StoryScene[];
   totalDuration: number;
+  requestedDuration?: number;
+  durationToleranceSeconds?: number;
+  durationWithinTolerance?: boolean;
   rationale: string;
 }
 

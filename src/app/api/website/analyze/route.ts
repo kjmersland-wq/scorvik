@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   const payload = body as Record<string, unknown>;
   if (typeof payload.url !== "string" || payload.url.length > 2048) return errorResponse("INVALID_URL", 400);
   if (payload.mode !== undefined && payload.mode !== "advert" && payload.mode !== "instruction") return errorResponse("INVALID_URL", 400);
-  if (payload.duration !== undefined && (!Number.isInteger(payload.duration) || ![15, 20, 30, 45, 60, 90].includes(payload.duration as number))) return errorResponse("INVALID_URL", 400);
+  if (payload.duration !== undefined && (!Number.isInteger(payload.duration) || ![15, 20, 30, 45, 60, 90, 120, 180].includes(payload.duration as number))) return errorResponse("INVALID_URL", 400);
   if (payload.language !== undefined && (typeof payload.language !== "string" || payload.language.length > 40)) return errorResponse("INVALID_URL", 400);
   const platform = typeof payload.platform === "string" ? payload.platform : "youtube";
   if (!getPlatformPreset(platform)) return errorResponse("INVALID_URL", 400);
