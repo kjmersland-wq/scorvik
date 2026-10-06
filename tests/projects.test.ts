@@ -116,6 +116,7 @@ test("project preview accepts only a completed real MP4 render and preserves pro
     renderJob: { renderId: "real", status: "complete", mode: "real", engine: "ffmpeg", outputUrl: "https://cdn.example.com/film.mp4?signature=valid" },
   };
   assert.equal(getProjectVideoUrl(renderedProject), "https://cdn.example.com/film.mp4?signature=valid");
+  assert.equal(getProjectVideoUrl({ ...project, renderJob: { renderId: "12345678-1234-1234-1234-123456789abc", status: "complete", mode: "real", engine: "ffmpeg", outputUrl: "/api/render/jobs/12345678-1234-1234-1234-123456789abc/video" } }), "/api/render/jobs/12345678-1234-1234-1234-123456789abc/video");
   assert.equal(renderedProject.thumbnailUrl, project.thumbnailUrl);
   assert.deepEqual(renderedProject.scenes, project.scenes);
   assert.equal(getProjectVideoUrl({ ...project, renderJob: { renderId: "bad", status: "complete", mode: "real", engine: "external", outputUrl: "javascript:alert(1)" } }), undefined);

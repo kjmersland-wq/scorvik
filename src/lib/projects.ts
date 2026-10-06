@@ -42,6 +42,8 @@ export function getProjectThumbnail(project: Pick<VideoProject, "thumbnailUrl" |
 export function getProjectVideoUrl(project: Pick<VideoProject, "renderJob">): string | undefined {
   const job = project.renderJob;
   if (job?.mode !== "real" || job.status !== "complete" || !job.outputUrl) return undefined;
+  if (job.engine === "ffmpeg" && job.outputUrl === `/api/render/jobs/${job.renderId}/video`) return job.outputUrl;
+  if (job.engine === "external" && job.outputUrl === `/api/render/jobs/${job.renderId}/video`) return job.outputUrl;
   try {
     const url = new URL(job.outputUrl);
     return (url.protocol === "https:" || url.protocol === "http:") && url.pathname.toLowerCase().endsWith(".mp4")

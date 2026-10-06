@@ -20,6 +20,7 @@
 
 # production
 /build
+/.scorvik-renders/
 
 # misc
 .DS_Store

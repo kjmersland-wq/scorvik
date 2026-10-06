@@ -245,7 +245,11 @@ export interface RenderJob {
   status: "queued" | "processing" | "complete" | "failed";
   mode: "mock" | "real";
   engine: "demo" | "ffmpeg" | "external";
+  progress?: number;
+  updatedAt?: string;
   outputUrl?: string;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 export interface VideoVersion {
