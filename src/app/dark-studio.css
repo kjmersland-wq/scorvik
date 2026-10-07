@@ -649,3 +649,8 @@ body::before {
 .music-pick-main b { color: #eee7df; }
 .music-pick-main small { color: #a99f97; }
 .music-pick-reasons { margin: 10px 0 0; padding-left: 18px; color: #cfc5bc; font-size: 11px; line-height: 1.6; }
+
+.versions-panel { margin-top: 20px; }
+.version-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+.version-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #302b2a; border-radius: 2px; color: #cfc5bc; font-size: 12px; }
+.version-list b { color: #eee7df; font-weight: 600; }

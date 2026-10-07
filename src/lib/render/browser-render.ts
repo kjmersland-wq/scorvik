@@ -45,34 +45,59 @@ async function loadBitmap(source: string, baseUrl: string): Promise<ImageBitmap 
   }
 }
 
+const shortestSide = (bitmap: ImageBitmap) => Math.min(bitmap.width, bitmap.height);
+const usable = (bitmap: ImageBitmap) => shortestSide(bitmap) >= 300 && bitmap.width / bitmap.height > 0.3 && bitmap.width / bitmap.height < 3.5;
+
+// Picks the best picture for every scene: the scene's own (name-matched) image when it is good enough,
+// otherwise the sharpest unused picture from the site, and only then a repeat.
 async function loadSceneImages(project: VideoProject, width: number, height: number, signal?: AbortSignal): Promise<Visual[]> {
   const logos = new Set(project.analysis.logoCandidates ?? []);
-  const fallbacks = [project.thumbnailUrl, project.analysis.openGraphImage, ...(project.analysis.images ?? []).filter((image) => !logos.has(image)), project.analysis.image]
-    .filter((value): value is string => Boolean(value));
   const cache = new Map<string, ImageBitmap | undefined>();
-  const visuals = new Map<ImageBitmap, Visual>();
-  const bitmaps: Visual[] = [];
-  for (const [index, scene] of project.scenes.entries()) {
+  const get = async (url: string) => {
+    if (!cache.has(url)) cache.set(url, await loadBitmap(url, project.analysis.url));
+    return cache.get(url);
+  };
+  const chosen: Array<{ url: string; bitmap: ImageBitmap } | undefined> = [];
+  const used = new Set<string>();
+  for (const scene of project.scenes) {
     throwIfAborted(signal);
-    let found: ImageBitmap | undefined;
-    for (const candidate of new Set([scene.visual, ...fallbacks].filter(Boolean))) {
-      if (!cache.has(candidate)) cache.set(candidate, await loadBitmap(candidate, project.analysis.url));
-      found = cache.get(candidate);
-      if (found) break;
-    }
-    if (!found) throw new Error(`Scene ${index + 1} has no image that could be loaded.`);
-    let visual = visuals.get(found);
-    if (!visual) { visual = await prepareVisual(found, width, height); visuals.set(found, visual); }
-    bitmaps.push(visual);
+    const own = scene.visual ? await get(scene.visual) : undefined;
+    if (own && usable(own) && !used.has(scene.visual)) { chosen.push({ url: scene.visual, bitmap: own }); used.add(scene.visual); } else chosen.push(undefined);
   }
-  return bitmaps;
+  if (chosen.some((entry) => !entry)) {
+    const pool = [...new Set([project.analysis.openGraphImage, ...(project.analysis.images ?? []), project.analysis.image, project.thumbnailUrl].filter((value): value is string => Boolean(value) && !logos.has(value as string)))].slice(0, 14);
+    for (let start = 0; start < pool.length; start += 4) {
+      throwIfAborted(signal);
+      await Promise.all(pool.slice(start, start + 4).map((url) => get(url)));
+    }
+    const ranked = pool.map((url) => ({ url, bitmap: cache.get(url) })).filter((entry): entry is { url: string; bitmap: ImageBitmap } => Boolean(entry.bitmap && usable(entry.bitmap)))
+      .sort((left, right) => shortestSide(right.bitmap) - shortestSide(left.bitmap));
+    const fallbackAny = pool.map((url) => ({ url, bitmap: cache.get(url) })).filter((entry): entry is { url: string; bitmap: ImageBitmap } => Boolean(entry.bitmap));
+    for (const [index, entry] of chosen.entries()) {
+      if (entry) continue;
+      const fresh = ranked.find((candidate) => !used.has(candidate.url));
+      const pick = fresh ?? ranked[index % Math.max(1, ranked.length)] ?? fallbackAny[0];
+      if (!pick) throw new Error(`Scene ${index + 1} has no image that could be loaded.`);
+      used.add(pick.url);
+      chosen[index] = pick;
+    }
+  }
+  const visuals = new Map<ImageBitmap, Visual>();
+  const result: Visual[] = [];
+  for (const entry of chosen) {
+    const bitmap = entry!.bitmap;
+    let visual = visuals.get(bitmap);
+    if (!visual) { visual = await prepareVisual(bitmap, width, height); visuals.set(bitmap, visual); }
+    result.push(visual);
+  }
+  return result;
 }
 
 function motion(scene: StoryScene, index: number, rawProgress: number) {
   const progress = rawProgress * rawProgress * (3 - 2 * rawProgress); // ease in/out like a dolly move
-  if (scene.purpose === "Hook" || scene.purpose === "Product") return { zoom: 1 + 0.07 * progress, pan: 0.5 };
-  if (scene.purpose === "Benefit" || scene.purpose === "Story") return { zoom: 1.06, pan: index % 2 === 0 ? 0.3 + 0.4 * progress : 0.7 - 0.4 * progress };
-  return { zoom: 1.07 - 0.07 * progress, pan: 0.5 };
+  if (scene.purpose === "Hook" || scene.purpose === "Product") return { zoom: 1 + 0.07 * progress, pan: 0.5, tilt: 0.3 - 0.1 * progress };
+  if (scene.purpose === "Benefit" || scene.purpose === "Story" || scene.purpose === "Step") return { zoom: 1.06, pan: index % 2 === 0 ? 0.3 + 0.4 * progress : 0.7 - 0.4 * progress, tilt: 0.25 + 0.1 * progress };
+  return { zoom: 1.07 - 0.07 * progress, pan: 0.5, tilt: 0.3 };
 }
 
 interface Visual { image: ImageBitmap; backdrop?: HTMLCanvasElement }
@@ -152,7 +177,7 @@ async function prepareVisual(raw: ImageBitmap, width: number, height: number): P
 }
 
 function drawScene(ctx: CanvasRenderingContext2D, visual: Visual, scene: StoryScene, index: number, progress: number, width: number, height: number) {
-  const { zoom, pan } = motion(scene, index, progress);
+  const { zoom, pan, tilt } = motion(scene, index, progress);
   const { image, backdrop } = visual;
   if (backdrop) {
     ctx.drawImage(backdrop, 0, 0);
@@ -166,7 +191,7 @@ function drawScene(ctx: CanvasRenderingContext2D, visual: Visual, scene: StorySc
   const drawWidth = image.width * cover;
   const drawHeight = image.height * cover;
   // Bias the crop upward so heads and key subjects stay in frame.
-  ctx.drawImage(image, -(drawWidth - width) * pan, -(drawHeight - height) * 0.3, drawWidth, drawHeight);
+  ctx.drawImage(image, -(drawWidth - width) * pan, -(drawHeight - height) * tilt, drawWidth, drawHeight);
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {

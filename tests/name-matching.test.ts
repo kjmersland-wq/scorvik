@@ -35,3 +35,21 @@ test("copy voice keeps one message per scene and stays stable per brand", () => 
   assert.match(introQuestion("en", 3, "Acme"), /3/);
   assert.ok(closingQuestion("no", "Acme").endsWith("?"));
 });
+
+import { passesFactGuard, validateScenes } from "../src/lib/ai/copy-llm.ts";
+
+test("AI copy may rephrase but never add numbers or names", () => {
+  const source = "Acme sender 100 tekster i måneden til Instagram og Facebook.";
+  assert.equal(passesFactGuard("100 tekster hver måned på Instagram", source), true);
+  assert.equal(passesFactGuard("200 tekster hver måned", source), false);
+  assert.equal(passesFactGuard("Brukt av Coca-Cola og Nike", source), false);
+  const scenes = [{ id: "a", purpose: "Step", headline: "Del det som skjer", supportingText: "Dagens rett" }, { id: "b", purpose: "CTA", headline: "Passer dette?", supportingText: "", locked: true }];
+  const out = validateScenes([{ id: "a", headline: "Del dagens rett", supportingText: "" }, { id: "b", headline: "Kjøp nå!", supportingText: "" }], scenes, "dagens rett", false);
+  assert.equal(out?.[0].headline, "Del dagens rett");
+  assert.equal(out?.[1].headline, "Passer dette?");
+  const bad = validateScenes([{ id: "a", headline: "Spar 50 prosent", supportingText: "" }, { id: "b", headline: "x", supportingText: "" }], scenes, "dagens rett", false);
+  assert.equal(bad?.[0].headline, "Del det som skjer");
+  const translated = validateScenes([{ id: "a", headline: "Share what happens", supportingText: "Dish of the day" }, { id: "b", headline: "Does this fit?", supportingText: "" }], scenes, "", true);
+  assert.equal(translated?.[0].headline, "Share what happens");
+  assert.equal(translated?.[1].headline, "Does this fit?");
+});

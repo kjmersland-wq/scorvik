@@ -70,6 +70,20 @@ function extractSteps(html: string, subheadings: string[]): Array<{ title: strin
   return (structured.length >= 2 ? structured : [...structured, ...loose]).slice(0, 10);
 }
 
+/** Picks the largest candidate from a srcset, falling back to the plain src attributes. */
+function bestImageSource(attrs: Record<string, string>): string | undefined {
+  const srcset = attrs.srcset ?? attrs["data-srcset"];
+  if (srcset) {
+    const candidates = srcset.split(",").map((part) => part.trim().split(/\s+/)).filter((parts) => parts[0]);
+    const sized = candidates.map((parts) => ({ url: parts[0], size: parseFloat(parts[1] ?? "1") || 1 }));
+    sized.sort((left, right) => right.size - left.size);
+    if (sized[0]) return sized[0].url;
+  }
+  return attrs.src ?? attrs["data-src"] ?? attrs["data-lazy-src"] ?? attrs["data-original"];
+}
+
+const unusableImage = /\.(svg|gif|ico)(\?|#|$)|sprite|spacer|pixel|favicon|tracking|1x1/i;
+
 export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
   const title = cleanText(html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1] ?? "").slice(0, 180);
   const description = getMeta(html, "name", "description") ?? getMeta(html, "property", "og:description") ?? "";
@@ -82,15 +96,26 @@ export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
   const imageUrls = new Set<string>();
   const logoUrls = new Set<string>();
   const imageAlts: Record<string, string> = {};
-  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
-    const attrs = attributes(match[0]);
-    const imageUrl = toSafeUrl(attrs.src ?? attrs["data-src"] ?? attrs["data-lazy-src"], finalUrl);
-    if (!imageUrl || imageUrls.size >= 30) continue;
+  const addImage = (source: string | undefined, attrs: Record<string, string> = {}) => {
+    const imageUrl = toSafeUrl(source, finalUrl);
+    const logoLike = /logo|brand|wordmark/i.test(`${attrs.alt ?? ""} ${attrs.class ?? ""} ${attrs.id ?? ""}`);
+    if (!imageUrl || imageUrls.size >= 40 || imageUrls.has(imageUrl) || (unusableImage.test(imageUrl) && !logoLike)) return;
+    const declared = [Number(attrs.width), Number(attrs.height)].filter((value) => Number.isFinite(value) && value > 0);
+    if (declared.length && Math.min(...declared) <= 80) return;
     imageUrls.add(imageUrl);
     const fileName = decodeURIComponent(imageUrl.split(/[?#]/)[0].split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_.+]+/g, " ");
     imageAlts[imageUrl] = `${attrs.alt ?? ""} ${attrs.title ?? ""} ${fileName}`.replace(/\s+/g, " ").trim().slice(0, 300);
     if (/logo|brand|wordmark/i.test(`${attrs.alt ?? ""} ${attrs.class ?? ""} ${attrs.id ?? ""}`)) logoUrls.add(imageUrl);
+  };
+  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    addImage(bestImageSource(attrs), attrs);
   }
+  for (const match of html.matchAll(/<source\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    if (attrs.srcset || attrs["data-srcset"]) addImage(bestImageSource(attrs));
+  }
+  for (const match of html.matchAll(/background(?:-image)?\s*:[^;"']*url\(\s*['"]?([^'")\s]+)/gi)) addImage(match[1]);
   const links: Array<{ label: string; url: string }> = [];
   const callsToAction: string[] = [];
   for (const match of html.matchAll(/<a\b[^>]*>[\s\S]*?<\/a\s*>/gi)) {

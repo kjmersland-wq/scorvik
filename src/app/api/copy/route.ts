@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import { hasValidPreviewSession } from "@/lib/auth/session";
+import { copyAvailable, copyLanguages, polishScenes, translateScenes, type CopyScene } from "@/lib/ai/copy-llm";
+
+export const runtime = "nodejs";
+
+export async function GET() {
+  if (!await hasValidPreviewSession()) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  return NextResponse.json({ available: copyAvailable() });
+}
+
+function readScenes(value: unknown): CopyScene[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 60) return undefined;
+  const scenes: CopyScene[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") return undefined;
+    const scene = item as Record<string, unknown>;
+    if (typeof scene.id !== "string" || typeof scene.headline !== "string" || typeof scene.supportingText !== "string") return undefined;
+    if (scene.headline.length > 300 || scene.supportingText.length > 600) return undefined;
+    scenes.push({ id: scene.id.slice(0, 80), purpose: typeof scene.purpose === "string" ? scene.purpose.slice(0, 20) : "", headline: scene.headline, supportingText: scene.supportingText, locked: scene.locked === true });
+  }
+  return scenes;
+}
+
+export async function POST(request: Request) {
+  if (!await hasValidPreviewSession()) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  if (!copyAvailable()) return NextResponse.json({ error: { code: "NOT_CONFIGURED" } }, { status: 503 });
+  let body: Record<string, unknown>;
+  try { body = await request.json() as Record<string, unknown>; } catch { return NextResponse.json({ error: { code: "INVALID" } }, { status: 400 }); }
+  const scenes = readScenes(body.scenes);
+  if (!scenes) return NextResponse.json({ error: { code: "INVALID" } }, { status: 400 });
+  try {
+    if (body.task === "translate" && typeof body.language === "string" && body.language in copyLanguages) {
+      const result = await translateScenes(body.language, scenes);
+      return result ? NextResponse.json({ scenes: result }) : NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
+    }
+    if (body.task === "polish" && typeof body.brand === "string" && typeof body.source === "string") {
+      const result = await polishScenes(body.brand.slice(0, 120), body.source.slice(0, 6000), scenes);
+      return result ? NextResponse.json({ scenes: result }) : NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
+    }
+  } catch {
+    return NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
+  }
+  return NextResponse.json({ error: { code: "INVALID" } }, { status: 400 });
+}

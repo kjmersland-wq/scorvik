@@ -9,6 +9,7 @@ import { defaultAudioMix, fitMusicToVideo } from "@/lib/audio/mix";
 import { saveProject } from "@/lib/projects";
 import { browserRenderSupported, renderProjectInBrowser } from "@/lib/render/browser-render";
 import { saveVideo } from "@/lib/video-store";
+import { VersionsPanel } from "@/components/versions-panel";
 import type { CreativeBrief, FilmMode, ScenePurpose, SiteAnalysis, StoryScene, VideoFormat, VideoProject, VideoSettings } from "@/types/project";
 import { MusicStudio } from "@/components/music-studio";
 import { platformPresets } from "@/lib/platforms/presets";
@@ -100,6 +101,30 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     updateSetting("duration", storyboard.totalDuration);
   }
 
+  // Optional: Claude tightens the wording (never adding facts). Silent when no API key is configured or the guard rejects a line.
+  async function polishInBackground(list: StoryScene[], site: SiteAnalysis) {
+    try {
+      const source = [site.title, site.description, ...(site.headings ?? []), ...(site.subheadings ?? []), ...(site.steps ?? []).map((step) => `${step.title} ${step.description}`), (site.visibleText ?? "").slice(0, 2500)].join("\n");
+      const response = await fetch("/api/copy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ task: "polish", brand: site.brand, source, scenes: list.map((scene, index) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText, locked: index === 0 || index === list.length - 1 })) }),
+      });
+      if (!response.ok) return;
+      const data = await response.json() as { scenes?: Array<{ id: string; headline: string; supportingText: string }> };
+      const polished = data.scenes;
+      if (!polished) return;
+      setScenes((current) => current.map((scene) => {
+        const next = polished.find((item) => item.id === scene.id);
+        const before = list.find((item) => item.id === scene.id);
+        // never overwrite text the user has already edited
+        return next && before && scene.headline === before.headline && scene.supportingText === before.supportingText ? { ...scene, headline: next.headline, supportingText: next.supportingText } : scene;
+      }));
+    } catch {
+      // keep the template wording
+    }
+  }
+
   async function analyzeUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAnalysisError("");
@@ -127,6 +152,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       setAnalysis(nextAnalysis);
       setCreativeBrief(nextBrief);
       setScenes(nextScenes);
+      void polishInBackground(nextScenes, nextAnalysis);
       setSettings((current) => ({
         ...current,
         duration: result.storyboard.totalDuration,
@@ -316,6 +342,8 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         <section className="panel result-frame"><div className="result-preview" style={videoUrl ? { background: "#000", minHeight: 0, padding: 0, aspectRatio: project.settings.format.replace(":", " / "), maxHeight: "72vh" } : undefined}>{videoUrl ? <video src={videoUrl} controls playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} /> : <div><h2>{project.scenes[0]?.headline ?? project.title}</h2><small>{project.analysis.brand.toUpperCase()} · {text.resultEyebrow}</small></div>}</div></section>
         <aside className="panel result-side"><span className="eyebrow">{text.resultEyebrow}</span><h3>{project.title}</h3><p>{project.url}</p><p>{text.draftNotice}</p><div className="result-actions">{videoUrl && <a className="button" href={videoUrl} download={`${project.analysis.brand}.mp4`}>{text.downloadMp4} <span aria-hidden="true">↓</span></a>}<button className="button" onClick={() => { const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }); const downloadUrl = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = downloadUrl; anchor.download = `${project.analysis.brand}-project.json`; anchor.click(); URL.revokeObjectURL(downloadUrl); }}>{text.downloadProject} <span aria-hidden="true">↓</span></button>{!project.settings.showTextOnScreen && <button className="button button-light" onClick={() => { const blob = new Blob([buildSrt(project.scenes)], { type: "text/plain;charset=utf-8" }); const downloadUrl = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = downloadUrl; anchor.download = `${project.analysis.brand}-subtitles.srt`; anchor.click(); URL.revokeObjectURL(downloadUrl); }}>{text.downloadSrt} <span aria-hidden="true">↓</span></button>}<button className="button button-light" onClick={() => navigator.clipboard?.writeText(project.url)}>{text.copyLink}</button><button className="button button-light" onClick={() => { setProject(null); setAnalysis(null); setUrl(""); setStage("website"); }}>{text.anotherDirection}</button></div><div className="result-details"><div><span>{text.length}</span><b>{project.settings.duration} {text.seconds}</b></div><div><span>{text.format}</span><b>{project.settings.format}</b></div><div><span>{text.feeling}</span><b>{project.settings.style}</b></div><div><span>{text.scenes}</span><b>{project.scenes.length}</b></div></div><Link href={localizedPath(locale, `/projects/${project.id}`)} className="text-link result-detail-link">{text.fullStory} →</Link></aside>
       </div>}
+
+      {stage === "result" && project && <VersionsPanel project={project} locale={locale} />}
     </div>
   );
 }
