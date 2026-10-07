@@ -26,6 +26,8 @@ export interface StoryScene {
   voiceover: string;
   transition: string;
   visual: string;
+  /** true when the text names someone/something that no image can be tied to, so it must not be printed over the picture */
+  noOverlay?: boolean;
   visualSource?: "website-image" | "open-graph" | "not-detected";
   cta?: string;
   musicCue?: string;
@@ -50,6 +52,8 @@ export interface SiteAnalysis {
   visibleText?: string;
   images?: string[];
   logoCandidates?: string[];
+  /** alt text, title and file name for each image URL; used to pair names and headings with the right picture */
+  imageAlts?: Record<string, string>;
   relevantLinks?: Array<{ label: string; url: string }>;
   callsToAction?: string[];
   buttons?: string[];

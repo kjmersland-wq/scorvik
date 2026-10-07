@@ -56,11 +56,14 @@ export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
   const visibleText = cleanText(html.replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/gi, " ").replace(/<svg\b[^>]*>[\s\S]*?<\/svg\s*>/gi, " ")).slice(0, 16_000);
   const imageUrls = new Set<string>();
   const logoUrls = new Set<string>();
+  const imageAlts: Record<string, string> = {};
   for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
     const imageUrl = toSafeUrl(attrs.src ?? attrs["data-src"] ?? attrs["data-lazy-src"], finalUrl);
     if (!imageUrl || imageUrls.size >= 30) continue;
     imageUrls.add(imageUrl);
+    const fileName = decodeURIComponent(imageUrl.split(/[?#]/)[0].split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_.+]+/g, " ");
+    imageAlts[imageUrl] = `${attrs.alt ?? ""} ${attrs.title ?? ""} ${fileName}`.replace(/\s+/g, " ").trim().slice(0, 300);
     if (/logo|brand|wordmark/i.test(`${attrs.alt ?? ""} ${attrs.class ?? ""} ${attrs.id ?? ""}`)) logoUrls.add(imageUrl);
   }
   const links: Array<{ label: string; url: string }> = [];
@@ -116,6 +119,7 @@ export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
     visibleText,
     images: [...imageUrls],
     logoCandidates: [...logoUrls],
+    imageAlts,
     relevantLinks: links,
     buttons,
     steps,

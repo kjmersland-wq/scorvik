@@ -6,9 +6,8 @@ import { normalizeSceneDurations, validateRenderProject } from "./validation";
 
 // Renders a storyboard to an H.264/AAC MP4 inside the user's browser (WebCodecs + canvas), so no render server is needed.
 
-const frameRate = 30;
-const crossfade = 0.5;
-const shortSide = 720;
+const frameRate = 24; // cinema/TV-spot cadence
+const crossfade = 0.7;
 const sampleRate = 48_000;
 
 const aspect: Record<VideoFormat, [number, number]> = { "16:9": [16, 9], "9:16": [9, 16], "1:1": [1, 1], "4:5": [4, 5] };
@@ -24,7 +23,7 @@ export function browserRenderSupported(): boolean {
   return typeof window !== "undefined" && "VideoEncoder" in window && "VideoFrame" in window;
 }
 
-function frameSize(format: VideoFormat) {
+function frameSize(format: VideoFormat, shortSide: number) {
   const [w, h] = aspect[format];
   const scale = shortSide / Math.min(w, h);
   return { width: Math.round((w * scale) / 2) * 2, height: Math.round((h * scale) / 2) * 2 };
@@ -69,10 +68,11 @@ async function loadSceneImages(project: VideoProject, width: number, height: num
   return bitmaps;
 }
 
-function motion(scene: StoryScene, index: number, progress: number) {
-  if (scene.purpose === "Hook" || scene.purpose === "Product") return { zoom: 1 + 0.08 * progress, pan: 0.5 };
-  if (scene.purpose === "Benefit" || scene.purpose === "Story") return { zoom: 1.05, pan: index % 2 === 0 ? progress : 1 - progress };
-  return { zoom: 1.08 - 0.08 * progress, pan: 0.5 };
+function motion(scene: StoryScene, index: number, rawProgress: number) {
+  const progress = rawProgress * rawProgress * (3 - 2 * rawProgress); // ease in/out like a dolly move
+  if (scene.purpose === "Hook" || scene.purpose === "Product") return { zoom: 1 + 0.07 * progress, pan: 0.5 };
+  if (scene.purpose === "Benefit" || scene.purpose === "Story") return { zoom: 1.06, pan: index % 2 === 0 ? 0.3 + 0.4 * progress : 0.7 - 0.4 * progress };
+  return { zoom: 1.07 - 0.07 * progress, pan: 0.5 };
 }
 
 interface Visual { image: ImageBitmap; backdrop?: HTMLCanvasElement }
@@ -178,50 +178,144 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
   return lines.slice(0, 3);
 }
 
-// Lower-third: soft gradient, bold headline over a lighter supporting line, easing in and out with the scene.
-function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: number, height: number, local: number, duration: number) {
+const textFamily = '"Helvetica Neue", "Segoe UI", system-ui, Arial, sans-serif';
+const ease = (value: number) => { const v = Math.max(0, Math.min(1, value)); return v * v * (3 - 2 * v); };
+
+function tracking(ctx: CanvasRenderingContext2D, value: string) {
+  if ("letterSpacing" in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = value;
+}
+
+// Centred title card in the style of a TV spot: headline over a lighter supporting line, easing in and out with the scene.
+function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: number, height: number, local: number, duration: number, inset: number, hide: number) {
+  if (scene.noOverlay) return;
   const headline = scene.headline.trim();
   const support = scene.supportingText.trim() && scene.supportingText.trim() !== headline ? scene.supportingText.trim() : "";
   if (!headline && !support) return;
-  const ease = (value: number) => { const v = Math.max(0, Math.min(1, value)); return v * v * (3 - 2 * v); };
-  const appear = ease((local - 0.15) / 0.55) * ease((duration - local) / 0.3);
+  const appear = ease((local - 0.25) / 0.7) * ease((duration - local) / 0.35) * (1 - hide);
   if (appear <= 0) return;
-  const margin = Math.round(Math.min(width, height) * 0.075);
-  const maxWidth = width - margin * 2 - (width > height ? width * 0.15 : 0);
-  const headSize = Math.round(Math.min(width, height) * (width >= height ? 0.062 : 0.062));
-  const supportSize = Math.round(headSize * 0.52);
-  const family = '"Helvetica Neue", "Segoe UI", system-ui, Arial, sans-serif';
-  ctx.font = `700 ${headSize}px ${family}`;
-  const headLines = headline ? wrap(ctx, headline, maxWidth) : [];
-  ctx.font = `400 ${supportSize}px ${family}`;
+  const short = Math.min(width, height);
+  const maxWidth = width * (width > height ? 0.62 : 0.84);
+  const headSize = Math.round(short * 0.056);
+  const supportSize = Math.round(headSize * 0.5);
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "center";
+  tracking(ctx, "0.01em");
+  ctx.font = `600 ${headSize}px ${textFamily}`;
+  const headLines = headline ? wrap(ctx, headline, maxWidth).slice(0, 2) : [];
+  tracking(ctx, "0.03em");
+  ctx.font = `400 ${supportSize}px ${textFamily}`;
   const supportLines = support ? wrap(ctx, support, maxWidth).slice(0, 2) : [];
-  const blockHeight = headLines.length * headSize * 1.12 + (supportLines.length ? supportSize * 0.7 + supportLines.length * supportSize * 1.3 : 0);
-  const baseline = height - margin * 1.15;
+  const blockHeight = headLines.length * headSize * 1.15 + (supportLines.length ? supportSize * 0.9 + supportLines.length * supportSize * 1.35 : 0);
+  const baseline = height - inset - short * 0.085;
   const top = baseline - blockHeight;
-  const rise = (1 - appear) * headSize * 0.35;
+  const rise = (1 - appear) * headSize * 0.4;
 
-  const gradient = ctx.createLinearGradient(0, top - headSize * 2.2, 0, height);
+  const scrimTop = top - headSize * 2.6;
+  const gradient = ctx.createLinearGradient(0, scrimTop, 0, height);
   gradient.addColorStop(0, "rgba(0,0,0,0)");
-  gradient.addColorStop(1, "rgba(0,0,0,0.72)");
+  gradient.addColorStop(1, "rgba(0,0,0,0.7)");
   ctx.globalAlpha = appear;
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, top - headSize * 2.2, width, height - (top - headSize * 2.2));
+  ctx.fillRect(0, scrimTop, width, height - scrimTop);
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = headSize * 0.3;
   ctx.fillStyle = "#fff";
-  ctx.textBaseline = "alphabetic";
-  ctx.textAlign = "left";
-  ctx.shadowColor = "rgba(0,0,0,0.45)";
-  ctx.shadowBlur = headSize * 0.25;
   let y = top + rise;
-  ctx.font = `700 ${headSize}px ${family}`;
-  for (const line of headLines) { y += headSize * 1.12; ctx.fillText(line, margin, y - headSize * 0.18); }
+  tracking(ctx, "0.01em");
+  ctx.font = `600 ${headSize}px ${textFamily}`;
+  for (const line of headLines) { y += headSize * 1.15; ctx.fillText(line, width / 2, y - headSize * 0.2); }
   if (supportLines.length) {
-    ctx.font = `400 ${supportSize}px ${family}`;
-    ctx.fillStyle = "rgba(255,255,255,0.88)";
-    y += supportSize * 0.7;
-    for (const line of supportLines) { y += supportSize * 1.3; ctx.fillText(line, margin, y - supportSize * 0.3); }
+    tracking(ctx, "0.03em");
+    ctx.font = `400 ${supportSize}px ${textFamily}`;
+    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    y += supportSize * 0.9;
+    for (const line of supportLines) { y += supportSize * 1.35; ctx.fillText(line, width / 2, y - supportSize * 0.3); }
   }
   ctx.shadowBlur = 0;
+  tracking(ctx, "0px");
   ctx.globalAlpha = 1;
+}
+
+// Closing brand card: the film dims and settles on the brand name, a hairline rule and the web address.
+function drawEndCard(ctx: CanvasRenderingContext2D, brand: string, address: string, width: number, height: number, amount: number) {
+  if (amount <= 0) return;
+  const short = Math.min(width, height);
+  ctx.globalAlpha = amount * 0.68;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalAlpha = amount;
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const brandSize = Math.round(short * 0.07);
+  tracking(ctx, "0.3em");
+  ctx.font = `300 ${brandSize}px ${textFamily}`;
+  const brandText = brand.toUpperCase();
+  let size = brandSize;
+  while (ctx.measureText(brandText).width > width * 0.84 && size > 12) { size -= 2; ctx.font = `300 ${size}px ${textFamily}`; }
+  ctx.fillText(brandText, width / 2 + short * 0.01, height / 2 - short * 0.02);
+  ctx.fillRect(width / 2 - short * 0.05, height / 2 + short * 0.045, short * 0.1, Math.max(1, short * 0.002));
+  tracking(ctx, "0.22em");
+  ctx.font = `400 ${Math.round(short * 0.028)}px ${textFamily}`;
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  ctx.fillText(address.toUpperCase(), width / 2 + short * 0.005, height / 2 + short * 0.1);
+  tracking(ctx, "0px");
+  ctx.globalAlpha = 1;
+}
+
+interface Finish { vignette: HTMLCanvasElement; grain: CanvasPattern | null; letterbox: number }
+
+// Film finish applied to every frame: gentle teal/amber grade, vignette, fine grain and optional widescreen bars.
+function createFinish(ctx: CanvasRenderingContext2D, width: number, height: number, cinemascope: boolean): Finish {
+  const vignette = document.createElement("canvas");
+  vignette.width = width;
+  vignette.height = height;
+  const vctx = vignette.getContext("2d");
+  if (vctx) {
+    const radial = vctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.35, width / 2, height / 2, Math.hypot(width, height) * 0.58);
+    radial.addColorStop(0, "rgba(0,0,0,0)");
+    radial.addColorStop(1, "rgba(0,0,0,0.5)");
+    vctx.fillStyle = radial;
+    vctx.fillRect(0, 0, width, height);
+  }
+  const noise = document.createElement("canvas");
+  noise.width = noise.height = 256;
+  const nctx = noise.getContext("2d");
+  if (nctx) {
+    const image = nctx.createImageData(256, 256);
+    for (let i = 0; i < image.data.length; i += 4) {
+      const value = Math.random() * 255;
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = value;
+      image.data[i + 3] = 40;
+    }
+    nctx.putImageData(image, 0, 0);
+  }
+  const letterbox = cinemascope && width / height > 1.9 ? 0 : cinemascope && width > height ? Math.round((height - width / 2.39) / 2) : 0;
+  return { vignette, grain: ctx.createPattern(noise, "repeat"), letterbox };
+}
+
+function applyFinish(ctx: CanvasRenderingContext2D, finish: Finish, width: number, height: number, frame: number) {
+  ctx.globalCompositeOperation = "soft-light";
+  const grade = ctx.createLinearGradient(0, 0, 0, height);
+  grade.addColorStop(0, "rgba(30,90,120,0.28)");
+  grade.addColorStop(1, "rgba(170,100,40,0.28)");
+  ctx.fillStyle = grade;
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(finish.vignette, 0, 0);
+  if (finish.grain) {
+    ctx.save();
+    ctx.translate((frame * 97) % 256, (frame * 53) % 256);
+    ctx.globalAlpha = 0.09;
+    ctx.fillStyle = finish.grain;
+    ctx.fillRect(-256, -256, width + 256, height + 256);
+    ctx.restore();
+  }
+  if (finish.letterbox > 0) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, width, finish.letterbox);
+    ctx.fillRect(0, height - finish.letterbox, width, finish.letterbox);
+  }
 }
 
 async function renderMusic(project: VideoProject): Promise<AudioBuffer | undefined> {
@@ -274,7 +368,14 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   if (!browserRenderSupported()) throw new Error("This browser cannot create video files. Use a current version of Chrome, Edge or Safari.");
   validateRenderProject(project);
   const scenes = normalizeSceneDurations(project.scenes, project.settings.duration);
-  const { width, height } = frameSize(project.settings.format);
+  // 1080p for normal spots; long films and weaker browsers fall back to 720p to keep rendering time sensible.
+  let quality = project.settings.duration > 90 ? 720 : 1080;
+  let { width, height } = frameSize(project.settings.format, quality);
+  const configFor = (w: number, h: number, q: number): VideoEncoderConfig => ({ codec: "avc1.640032", width: w, height: h, bitrate: q >= 1080 ? 9_000_000 : 5_000_000, framerate: frameRate, avc: { format: "avc" } });
+  if (!(await VideoEncoder.isConfigSupported(configFor(width, height, quality))).supported && quality > 720) {
+    quality = 720;
+    ({ width, height } = frameSize(project.settings.format, quality));
+  }
   const totalDuration = project.settings.duration;
   const showText = project.settings.showTextOnScreen !== false;
 
@@ -290,7 +391,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   }
   throwIfAborted(signal);
 
-  const videoConfig: VideoEncoderConfig = { codec: "avc1.640032", width, height, bitrate: 4_000_000, framerate: frameRate, avc: { format: "avc" } };
+  const videoConfig = configFor(width, height, quality);
   if (!(await VideoEncoder.isConfigSupported(videoConfig)).supported) throw new Error("This browser cannot encode H.264 video.");
 
   const target = new ArrayBufferTarget();
@@ -312,6 +413,9 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not create a drawing surface.");
 
+  const finish = createFinish(ctx, width, height, project.settings.style === "Cinematic");
+  const brand = project.analysis.brand || project.title;
+  const address = (() => { try { return new URL(project.analysis.url).hostname.replace(/^www\./, ""); } catch { return project.analysis.url; } })();
   const starts: number[] = [];
   scenes.reduce((sum, scene) => { starts.push(sum); return sum + scene.duration; }, 0);
   const frames = Math.round(totalDuration * frameRate);
@@ -327,16 +431,20 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const local = time - starts[current];
       ctx.globalAlpha = 1;
       drawScene(ctx, images[current], scene, current, local / scene.duration, width, height);
-      if (showText) drawText(ctx, scene, width, height, local, scene.duration);
       const untilEnd = scene.duration - local;
       if (current < scenes.length - 1 && untilEnd < crossfade) {
         const next = current + 1;
-        ctx.globalAlpha = 1 - untilEnd / crossfade;
+        ctx.globalAlpha = ease(1 - untilEnd / crossfade);
         drawScene(ctx, images[next], scenes[next], next, 0, width, height);
-        if (showText) drawText(ctx, scenes[next], width, height, 0.0, scenes[next].duration);
         ctx.globalAlpha = 1;
       }
-      const fade = Math.max(Math.min(1, 1 - time / 0.25), Math.min(1, 1 - (totalDuration - time) / 0.35), 0);
+      applyFinish(ctx, finish, width, height, frame);
+      const isLast = current === scenes.length - 1;
+      const cardWindow = Math.min(3, scene.duration * 0.65);
+      const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.8) : 0;
+      if (showText) drawText(ctx, scene, width, height, local, scene.duration, finish.letterbox, endAmount);
+      drawEndCard(ctx, brand, address, width, height, endAmount);
+      const fade = Math.max(Math.min(1, 1 - time / 0.4), Math.min(1, 1 - (totalDuration - time) / 0.6), 0);
       if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, fade)})`; ctx.fillRect(0, 0, width, height); }
 
       const videoFrame = new VideoFrame(canvas, { timestamp: Math.round((frame / frameRate) * 1e6), duration: Math.round(1e6 / frameRate) });

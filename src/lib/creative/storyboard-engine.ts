@@ -78,6 +78,29 @@ function sameSourceText(first: string, second: string): boolean {
   return first.trim().replace(/[.!?]+$/, "").toLowerCase() === second.trim().replace(/[.!?]+$/, "").toLowerCase();
 }
 
+const nameTokens = (value: string) => (value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+const namePattern = /^\p{Lu}[\p{L}'.-]+(?:\s+(?:\p{Lu}[\p{L}'.-]+|&|and|og)){1,3}$/u;
+
+/** Short capitalised phrases such as "Memphis Minnie" are names: printing one over the wrong photo is a factual error. */
+function looksLikeName(value: string): boolean {
+  const text = value.trim();
+  return text.split(/\s+/).length <= 4 && namePattern.test(text);
+}
+
+/** A picture whose alt text or file name names a person must not carry unrelated text. */
+function identifiesPerson(alt: string | undefined): boolean {
+  return Boolean(alt && /\p{Lu}[\p{L}'.-]+\s+\p{Lu}[\p{L}'.-]+/u.test(alt));
+}
+
+function imageMatchesText(alt: string | undefined, text: string): boolean {
+  if (!alt) return false;
+  const altTokens = new Set(nameTokens(alt));
+  const wanted = nameTokens(text);
+  if (!wanted.length) return false;
+  const shared = wanted.filter((token) => altTokens.has(token)).length;
+  return wanted.length === 1 ? shared === 1 : shared >= Math.min(2, wanted.length);
+}
+
 export function buildStoryboard(
   analysis: SiteAnalysis,
   brief: CreativeBrief,
@@ -150,7 +173,10 @@ export function buildStoryboard(
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const scenes: StoryScene[] = plans.map((plan, index) => {
     const duration = perScene + (remainder-- > 0 ? 1 : 0);
-    const image = analysis.images?.[index];
+    const alts = analysis.imageAlts ?? {};
+    const matched = plan.purpose === "CTA" ? undefined : analysis.images?.find((candidate) => imageMatchesText(alts[candidate], plan.headline));
+    const image = matched ?? analysis.images?.[index];
+    const noOverlay = !matched && (looksLikeName(plan.headline) || identifiesPerson(image ? alts[image] : undefined));
     const openGraphImage = analysis.openGraphImage || analysis.image;
     const visual = image || openGraphImage || "";
     return {
@@ -160,6 +186,7 @@ export function buildStoryboard(
       duration,
       headline: concise(plan.headline, ""),
       supportingText: concise(plan.supportingText, ""),
+      ...(noOverlay ? { noOverlay: true } : {}),
       voiceover: plan.voiceover,
       transition: options.locale === "no"
         ? index === 0 ? "Rolig åpning" : index === plans.length - 1 ? "Fade ut" : "Mykt klipp"
