@@ -105,3 +105,13 @@ test("text moves away from lettering, or sits on a panel when nowhere is calm", 
   assert.ok(boxed.panel >= 0.55);
   assert.equal(chooseTextPlacement({ top: 0.01, bottom: 0.3 }, true).position, "bottom"); // vertical films keep the top free for platform UI
 });
+
+import { visualQueryFor } from "../src/lib/creative/visual-queries.ts";
+
+test("pictures follow what the scene says", () => {
+  const site: SiteAnalysis = { ...base, title: "AutoVere: tolls and fuel in Europe", description: "Plan road trips" };
+  assert.equal(visualQueryFor("Story", site, "advert", "Ferries across the fjord"), "ferry sailing sea");
+  assert.equal(visualQueryFor("Story", site, "advert", "Bompenger i 90 land"), "highway toll road");
+  assert.equal(visualQueryFor("Hook", site, "advert", "Familien på tur med bobil"), "motorhome camper van road");
+  assert.equal(visualQueryFor("Hook", site, "advert", "Something unrelated"), "family road trip car"); // falls back to the site's own theme
+});

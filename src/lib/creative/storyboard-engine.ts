@@ -207,7 +207,7 @@ export function buildStoryboard(
       headline: caption.headline,
       supportingText: caption.supportingText,
       typography: { emphasis: highlightKeywords(caption.headline, language, 2) },
-      visualQuery: visualQueryFor(plan.purpose, analysis, mode),
+      visualQuery: visualQueryFor(plan.purpose, analysis, mode, `${caption.headline} ${caption.supportingText} ${plan.voiceover}`),
       ...(noOverlay ? { noOverlay: true } : {}),
       voiceover: plan.voiceover,
       transition: options.locale === "no"

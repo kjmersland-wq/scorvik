@@ -117,7 +117,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   }
 
   // Optional: Claude tightens the wording (never adding facts). Silent when no API key is configured or the guard rejects a line.
-  async function polishInBackground(list: StoryScene[], site: SiteAnalysis, tone = copyTone, force = false, mode: FilmMode = filmMode) {
+  async function polishInBackground(list: StoryScene[], site: SiteAnalysis, tone = copyTone, force = false, mode: FilmMode = filmMode): Promise<StoryScene[]> {
     try {
       const source = [site.title, site.description, ...(site.headings ?? []), ...(site.subheadings ?? []), ...(site.steps ?? []).map((step) => `${step.title} ${step.description}`), (site.visibleText ?? "").slice(0, 2500)].join("\n");
       const response = await fetch("/api/copy", {
@@ -125,18 +125,23 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ task: "polish", tone, mode, brand: site.brand, source, scenes: list.map((scene, index) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText, locked: index === 0 || index === list.length - 1 })) }),
       });
-      if (!response.ok) return;
+      if (!response.ok) return list;
       const data = await response.json() as { scenes?: Array<{ id: string; headline: string; supportingText: string; emphasis?: string[]; visualQuery?: string }> };
       const polished = data.scenes;
-      if (!polished) return;
+      if (!polished) return list;
       setScenes((current) => current.map((scene) => {
         const next = polished.find((item) => item.id === scene.id);
         const before = list.find((item) => item.id === scene.id);
         // never overwrite text the user has already edited
         return next && before && (force || (scene.headline === before.headline && scene.supportingText === before.supportingText)) ? { ...scene, headline: next.headline, supportingText: next.supportingText, typography: { emphasis: next.emphasis ?? scene.typography?.emphasis ?? [] }, visualQuery: next.visualQuery ?? scene.visualQuery } : scene;
       }));
+      return list.map((scene) => {
+        const next = polished.find((item) => item.id === scene.id);
+        return next ? { ...scene, headline: next.headline, supportingText: next.supportingText, typography: { emphasis: next.emphasis ?? scene.typography?.emphasis ?? [] }, visualQuery: next.visualQuery ?? scene.visualQuery } : scene;
+      });
     } catch {
       // keep the template wording
+      return list;
     }
   }
 
@@ -172,8 +177,9 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       setAnalysis(nextAnalysis);
       setCreativeBrief(nextBrief);
       setScenes(nextScenes);
-      void polishInBackground(nextScenes, nextAnalysis, copyTone, false, mode);
-      if (autoFill && stockSources && (stockSources.pixabay || stockSources.pexels || stockSources.unsplash)) void fillVisualsFromStock(nextScenes);
+      const sourcesReady = autoFill && stockSources && (stockSources.pixabay || stockSources.pexels || stockSources.unsplash);
+      // Claude rewrites the text first, so the pictures are searched for what each scene finally says
+      void polishInBackground(nextScenes, nextAnalysis, copyTone, false, mode).then((merged) => { if (sourcesReady) void fillVisualsFromStock(merged); });
       setSettings((current) => ({
         ...current,
         duration: result.storyboard.totalDuration,

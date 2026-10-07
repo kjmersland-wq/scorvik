@@ -14,7 +14,7 @@ export function stripEmoji(text: string): string {
 }
 
 /** Footer, legal and credit lines are not story material. */
-export const footerNoise = /©|all rights reserved|privacy|cookies?\b|terms (of|and)|a product by|powered by|made (with|by)|built (with|by)|alle rettigheter|personvern|vilkår|informasjonskapsler|disclaimer|indicative|estimates only|for informational purposes|verify with official|uforpliktende|kun veiledende/i;
+export const footerNoise = /©|all rights reserved|privacy|cookies?\b|terms (of|and)|a product by|powered by|made (with|by)|built (with|by)|alle rettigheter|personvern|vilkår|informasjonskapsler|disclaimer|indicative|estimates only|for informational purposes|verify with official|uforpliktende|kun veiledende|facebook[^.]{0,40}linkedin|linkedin[^.]{0,40}whatsapp|bshareb[^.]{0,30}(facebook|linkedin|whatsapp|email)|follow us|følg oss|newsletter|nyhetsbrev|subscribe to|del på/i;
 
 /** Cuts text to at most `maxWords` words, preferring a sentence or clause boundary over a hard cut. */
 export function condenseCaption(text: string, maxWords: number): string {
