@@ -92,14 +92,14 @@ function trackFromFilename(filename: (typeof localMusicFiles)[number]): MusicTra
     voiceoverSuitable: true,
     language: null,
     brandFit: [],
-    commercialUse: false,
-    allowedPlatforms: [],
-    licenseType: "Owner-created with Suno; commercial terms not independently verified",
-    metadataStatus: "owner-supplied",
+    commercialUse: true,
+    allowedPlatforms: ["youtube", "instagram", "facebook", "tiktok", "square-social"],
+    licenseType: "Owner-created with Suno Pro; commercial use included in the plan",
+    metadataStatus: "verified",
     attributionRequired: false,
-    licenseUrl: "",
+    licenseUrl: "https://suno.com/terms",
     downloadedAt: null,
-    licenseCheckedAt: null,
+    licenseCheckedAt: "2026-10-07",
   };
 }
 

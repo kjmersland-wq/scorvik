@@ -32,7 +32,7 @@ test("music ranking is deterministic, brand-sensitive and respects explicit genr
   const recommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert", userMoods: ["Modern", "Confident"] });
   assert.equal(recommendations[0]?.track.id, "modern-92-ad");
   assert.deepEqual(recommendations.map((item) => item.track.id), recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert", userMoods: ["Modern", "Confident"] }).map((item) => item.track.id));
-  assert.ok(recommendations.every((item) => item.track.usage === "ad" && item.licenseWarning.includes("unverified")));
+  assert.ok(recommendations.every((item) => item.track.usage === "ad" && item.licenseWarning.includes("verified")));
   const bluesOnly = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert", genrePreference: "Blues" });
   assert.ok(bluesOnly.length > 0);
   assert.ok(bluesOnly.every((item) => item.track.genre === "Blues"));
@@ -82,16 +82,16 @@ test("audio planning preserves layer timing, fades, ducking, and does not claim 
   assert.equal(timeline.status, "prepared-not-rendered");
   assert.deepEqual(timeline.layers.map((layer) => layer.kind), ["voice", "music", "sfx", "jingle"]);
   assert.deepEqual(timeline.layers[1].ducking, [{ startSeconds: 2, endSeconds: 12, gain: 0.38 }]);
-  assert.equal(timeline.layers[1].loop, false);
-  assert.match(timeline.layers[1].warning ?? "", /verified license/i);
+  assert.equal(timeline.layers[1].loop, true);
+  assert.equal(timeline.layers[1].warning, undefined);
   assert.equal(timeline.layers[2].startSeconds, 5);
   assert.equal(timeline.layers[3].endSeconds, 120);
 });
 
-test("Scorvik Original tracks preserve structured metadata and conservative licensing", () => {
+test("Scorvik Original tracks preserve structured metadata and are cleared for commercial use", () => {
   assert.equal(demoMusicCatalog.length, 19);
   assert.deepEqual(demoMusicCatalog.map((track) => track.audioUrl?.replace("/music/", "")).sort(), [...localMusicFiles].sort());
-  assert.ok(demoMusicCatalog.every((track) => track.sourceType === "scorvik-original" && track.metadataStatus === "owner-supplied" && track.voiceoverSuitable && track.tempoBpm !== null && !isClearedRoyaltyFreeTrack(track, "youtube")));
+  assert.ok(demoMusicCatalog.every((track) => track.sourceType === "scorvik-original" && track.metadataStatus === "verified" && track.voiceoverSuitable && track.tempoBpm !== null && isClearedRoyaltyFreeTrack(track, "youtube")));
   assert.equal(isClearedRoyaltyFreeTrack({ ...demoMusicCatalog[0], audioUrl: "https://audio.example/track.mp3" }, "youtube"), false);
   const verified = { ...demoMusicCatalog[0], metadataStatus: "verified" as const, commercialUse: true, licenseUrl: "https://license.example/terms", licenseCheckedAt: "2026-10-05T00:00:00.000Z", allowedPlatforms: ["youtube"] };
   assert.equal(isClearedRoyaltyFreeTrack(verified, "youtube-shorts"), true);

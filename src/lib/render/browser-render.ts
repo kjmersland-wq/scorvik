@@ -126,13 +126,15 @@ async function renderMusic(project: VideoProject): Promise<AudioBuffer | undefin
   await decoder.close();
   const total = project.settings.duration;
   const fit = fitMusicToVideo(source.duration, total, mix?.startSeconds ?? 0);
-  const audible = Math.max(0.1, Math.min(total, fit.endSeconds - fit.startSeconds));
+  const loop = fit.shouldLoop && track.commercialUse && track.metadataStatus === "verified";
+  const audible = loop ? total : Math.max(0.1, Math.min(total, fit.endSeconds - fit.startSeconds));
   const fadeIn = Math.min(mix?.fadeInSeconds ?? fit.fadeInSeconds, audible);
   const fadeOut = Math.min(mix?.fadeOutSeconds ?? fit.fadeOutSeconds, audible);
   const offline = new OfflineAudioContext(2, Math.ceil(sampleRate * total), sampleRate);
   const node = offline.createBufferSource();
   const gain = offline.createGain();
   node.buffer = source;
+  if (loop) { node.loop = true; node.loopStart = fit.startSeconds; node.loopEnd = source.duration; }
   gain.gain.setValueAtTime(0, 0);
   gain.gain.linearRampToValueAtTime(volume, Math.max(fadeIn, 0.01));
   gain.gain.setValueAtTime(volume, Math.max(fadeIn, audible - fadeOut));
