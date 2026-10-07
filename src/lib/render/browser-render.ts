@@ -3,6 +3,7 @@ import { fitMusicToVideo } from "@/lib/audio/mix";
 import { integratedLoudness } from "@/lib/audio/loudness";
 import { estimateBeatGrid, snapToBeats, type BeatGrid } from "@/lib/audio/beats";
 import { pickAccent } from "@/lib/creative/captions";
+import { chooseTextPlacement, edgeFraction, type TextLayout } from "./busyness";
 import { libraryMusic } from "@/lib/music/recommend";
 import type { StoryScene, VideoFormat, VideoProject } from "@/types/project";
 import { normalizeSceneDurations, validateRenderProject } from "./validation";
@@ -339,7 +340,21 @@ function tracking(ctx: CanvasRenderingContext2D, value: string) {
 }
 
 // Centred title card in the style of a TV spot: headline over a lighter supporting line, easing in and out with the scene.
-function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: number, height: number, local: number, duration: number, inset: number, hide: number) {
+// Looks at the finished picture (after cropping, backdrop and motion) where a title would sit: top band and lower band.
+function analyseLayout(ctx: CanvasRenderingContext2D, width: number, height: number): TextLayout {
+  const sample = (fromY: number, toY: number) => {
+    const strip = document.createElement("canvas");
+    strip.width = 128;
+    strip.height = Math.max(8, Math.round(128 * ((toY - fromY) * height) / width));
+    const stripContext = strip.getContext("2d", { willReadFrequently: true });
+    if (!stripContext) return 0;
+    stripContext.drawImage(ctx.canvas, 0, fromY * height, width, (toY - fromY) * height, 0, 0, strip.width, strip.height);
+    return edgeFraction(stripContext.getImageData(0, 0, strip.width, strip.height).data, strip.width, strip.height);
+  };
+  return { top: sample(0.06, 0.34), bottom: sample(0.6, 0.94) };
+}
+
+function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: number, height: number, local: number, duration: number, inset: number, hide: number, layout: TextLayout) {
   if (scene.noOverlay) return;
   const headline = scene.headline.trim();
   const support = scene.supportingText.trim() && scene.supportingText.trim() !== headline ? scene.supportingText.trim() : "";
@@ -361,17 +376,39 @@ function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: numbe
   const supportLines = support ? wrap(ctx, support, maxWidth).slice(0, 2) : [];
   const blockHeight = headLines.length * headSize * 1.15 + (supportLines.length ? supportSize * 0.9 + supportLines.length * supportSize * 1.35 : 0);
   // Vertical films keep titles above the platform's bottom UI zone (about the lower 20%).
+  const placement = chooseTextPlacement(layout, height > width);
   const baseline = height > width ? height - Math.max(inset, height * 0.2) - short * 0.03 : height - inset - short * 0.085;
-  const top = baseline - blockHeight;
+  const top = placement.position === "top" ? Math.max(inset, height * 0.07) + short * 0.02 : baseline - blockHeight;
   const rise = (1 - appear) * headSize * 0.4;
 
-  const scrimTop = top - headSize * 2.6;
-  const gradient = ctx.createLinearGradient(0, scrimTop, 0, height);
-  gradient.addColorStop(0, "rgba(0,0,0,0)");
-  gradient.addColorStop(1, "rgba(0,0,0,0.7)");
   ctx.globalAlpha = appear;
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, scrimTop, width, height - scrimTop);
+  if (placement.position === "top") { // soft fade from the top edge
+    const scrimBottom = top + blockHeight + headSize * 1.4;
+    const downward = ctx.createLinearGradient(0, 0, 0, scrimBottom);
+    downward.addColorStop(0, "rgba(0,0,0,0.72)");
+    downward.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = downward;
+    ctx.fillRect(0, 0, width, scrimBottom);
+  } else {
+    const scrimTop = top - headSize * 2.6;
+    const gradient = ctx.createLinearGradient(0, scrimTop, 0, height);
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, "rgba(0,0,0,0.7)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, scrimTop, width, height - scrimTop);
+  }
+  if (placement.panel > 0) { // the picture has its own lettering here: set ours on a dark panel so the two never collide
+    ctx.font = `600 ${headSize}px ${headlineFamily}`;
+    const headWidths = headLines.map((line) => ctx.measureText(line).width);
+    ctx.font = `400 ${supportSize}px ${textFamily}`;
+    const supportWidths = supportLines.map((line) => ctx.measureText(line).width);
+    const textWidth = Math.max(0, ...headWidths, ...supportWidths);
+    const pad = headSize * 0.55;
+    ctx.fillStyle = `rgba(10,9,8,${placement.panel})`;
+    ctx.beginPath();
+    ctx.roundRect(width / 2 - textWidth / 2 - pad, top - pad * 0.7 + rise, textWidth + pad * 2, blockHeight + pad * 1.4, pad * 0.7);
+    ctx.fill();
+  }
   ctx.shadowColor = "rgba(0,0,0,0.5)";
   ctx.shadowBlur = headSize * (kinetic ? 0.45 : 0.3);
   ctx.shadowOffsetY = kinetic ? headSize * 0.05 : 0;
@@ -778,6 +815,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const starts = beatGrid ? snapToBeats(plainStarts, beatGrid, totalDuration, instructional ? 0.9 : 0.5, instructional ? 3.5 : 2, 4, instructional) : plainStarts;
   const timeline = scenes.map((scene, index) => ({ ...scene, duration: (starts[index + 1] ?? totalDuration) - starts[index] }));
   const frames = Math.round(totalDuration * frameRate);
+  const layouts: Array<TextLayout | undefined> = [];
 
   try {
     let current = 0;
@@ -792,6 +830,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const currentClip = images[current].video;
       if (currentClip) await seekVideo(currentClip, local);
       drawScene(ctx, images[current], scene, current, local / scene.duration, width, height);
+      if (!layouts[current] && local >= 0.1) layouts[current] = analyseLayout(ctx, width, height);
       const untilEnd = scene.duration - local;
       if (current < timeline.length - 1 && untilEnd < crossfade) {
         const next = current + 1;
@@ -812,7 +851,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.5) : 0;
       const introLength = Math.min(3, totalDuration * 0.2);
       const introAmount = current === 0 ? ease(local / 0.5) * (1 - ease((local - (introLength - 0.7)) / 0.7)) : 0;
-      if (showText) drawText(ctx, scene, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount));
+      if (showText) drawText(ctx, scene, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount), layouts[current] ?? { top: 0, bottom: 0 });
       drawIntro(ctx, logo, brand, width, height, introAmount, current === 0 ? local / introLength : 0);
       drawEndCard(ctx, logo, brand, address, credits, width, height, endAmount, isLast ? 0.5 + 0.5 * Math.sin(local * 2.4) : 0);
       // First frame is already readable (never pure black); the picture is up within 0.4 s and the film only fades in the last 0.4 s.

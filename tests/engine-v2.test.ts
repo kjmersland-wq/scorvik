@@ -81,3 +81,27 @@ test("hype words never reach the screen", () => {
   const out = validateScenes([{ id: "a", headline: "The ultimate way to ship", supportingText: "" }], scenes, "ship", false);
   assert.equal(out?.[0].headline, "Ship calmly");
 });
+
+import { chooseTextPlacement, edgeFraction } from "../src/lib/render/busyness.ts";
+
+function frame(width: number, height: number, paint: (x: number, y: number) => number) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) { const v = paint(x, y); const i = (y * width + x) * 4; data[i] = data[i + 1] = data[i + 2] = v; data[i + 3] = 255; }
+  return data;
+}
+
+test("printed lettering in a picture is detected, calm areas are not", () => {
+  const calm = frame(128, 24, (x) => 80 + x * 0.3);
+  const lettering = frame(128, 24, (x, y) => ((Math.floor(x / 6) + Math.floor(y / 6)) % 2 === 0 ? 240 : 20));
+  assert.ok(edgeFraction(calm, 128, 24) < 0.01);
+  assert.ok(edgeFraction(lettering, 128, 24) > 0.2);
+});
+
+test("text moves away from lettering, or sits on a panel when nowhere is calm", () => {
+  assert.deepEqual(chooseTextPlacement({ top: 0.01, bottom: 0.02 }, false), { position: "bottom", panel: 0 });
+  assert.equal(chooseTextPlacement({ top: 0.01, bottom: 0.3 }, false).position, "top");
+  const boxed = chooseTextPlacement({ top: 0.3, bottom: 0.3 }, false);
+  assert.equal(boxed.position, "bottom");
+  assert.ok(boxed.panel >= 0.55);
+  assert.equal(chooseTextPlacement({ top: 0.01, bottom: 0.3 }, true).position, "bottom"); // vertical films keep the top free for platform UI
+});

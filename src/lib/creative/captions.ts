@@ -8,9 +8,17 @@ const stopwords: Record<"no" | "en", Set<string>> = {
 
 const trailing = /[\s,;:–—-]+$/;
 
+/** Emoji and pictographs look off in film titles; drop them and tidy the spaces. */
+export function stripEmoji(text: string): string {
+  return text.replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu, "").replace(/\s+/g, " ").trim();
+}
+
+/** Footer, legal and credit lines are not story material. */
+export const footerNoise = /©|all rights reserved|privacy|cookies?\b|terms (of|and)|a product by|powered by|made (with|by)|built (with|by)|alle rettigheter|personvern|vilkår|informasjonskapsler|disclaimer|indicative|estimates only|for informational purposes|verify with official|uforpliktende|kun veiledende/i;
+
 /** Cuts text to at most `maxWords` words, preferring a sentence or clause boundary over a hard cut. */
 export function condenseCaption(text: string, maxWords: number): string {
-  const clean = text.trim().replace(/\s+/g, " ");
+  const clean = stripEmoji(text);
   if (countWords(clean) <= maxWords) return clean;
   const words = clean.split(" ");
   const head = words.slice(0, maxWords).join(" ");

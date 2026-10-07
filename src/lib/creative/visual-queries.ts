@@ -17,14 +17,16 @@ const byCategory: Record<string, string[]> = {
   media: ["camera crew", "music studio", "newsroom", "vinyl records"],
   music: ["vinyl records", "guitar close up", "concert stage", "music studio"],
 };
+const roadTrip = ["family road trip car", "motorcycle touring road", "motorhome camper van road", "scenic mountain road drive", "electric car charging", "highway toll road", "ferry sailing sea", "fuel station"];
 const fallback = ["modern workspace", "people collaborating", "city lifestyle", "hands working desk"];
 const instruction = ["app interface screen", "laptop typing hands", "dashboard analytics", "smartphone app close up"];
 
-const slot: Record<ScenePurpose, number> = { Hook: 0, Story: 1, Product: 2, Benefit: 3, Proof: 1, CTA: 0, Step: 0 };
+const slot: Record<ScenePurpose, number> = { Hook: 0, Story: 1, Product: 2, Benefit: 3, Proof: 4, CTA: 3, Step: 5 };
 
 export function visualQueryFor(purpose: ScenePurpose, analysis: SiteAnalysis, mode: FilmMode): string {
   const text = `${analysis.title} ${analysis.description}`.toLowerCase();
-  const category = /\bblues\b|guitar|vinyl|concert/.test(text) ? "music" : analysis.brandProfile?.category ?? "other";
+  const category = /\bblues\b|guitar|vinyl|concert/.test(text) ? "music" : /toll|vignette|road trip|motorhome|camper|bompenger|bobil|drivstoff|ferry/.test(`${text} ${analysis.visibleText ?? ""}`.toLowerCase().slice(0, 4000)) ? "roadtrip" : analysis.brandProfile?.category ?? "other";
+  if (category === "roadtrip") return roadTrip[(slot[purpose] + (mode === "instruction" ? 3 : 0)) % roadTrip.length];
   const pool = mode === "instruction" && (category === "saas" || category === "other" || category === "professional-service") ? instruction : byCategory[category] ?? fallback;
   return pool[slot[purpose] % pool.length];
 }

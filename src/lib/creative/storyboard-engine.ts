@@ -1,4 +1,4 @@
-import { condenseCaption, highlightKeywords } from "./captions.ts";
+import { condenseCaption, footerNoise, highlightKeywords } from "./captions.ts";
 import { closingQuestion, focusHeadline, introQuestion } from "./copy-voice.ts";
 import { fitDurations, readingSeconds } from "./timing.ts";
 import { visualQueryFor } from "./visual-queries.ts";
@@ -40,7 +40,7 @@ function normalizeEvidence(value: string): string {
 
 function makePlan(purpose: ScenePurpose, headline: string, supportingText = "", cta?: string): ScenePlan {
   if (supportingText && supportingText.toLowerCase().startsWith(headline.toLowerCase())) supportingText = supportingText.slice(headline.length).trim();
-  const voiceover = [headline, supportingText].filter(Boolean).join(". ");
+  const voiceover = [headline, supportingText].filter(Boolean).reduce((text, part) => (text ? `${text}${/[.!?…]$/.test(text) ? " " : ". "}${part}` : part), "");
   return { purpose, headline, supportingText, voiceover: voiceover ? `${voiceover}${/[.!?]$/.test(voiceover) ? "" : "."}` : "", cta };
 }
 
@@ -166,7 +166,8 @@ export function buildStoryboard(
       : uniquePlans([...intro, ...steps, ...details.slice(0, detailCapacity), ...copyDetails.slice(0, Math.max(0, detailCapacity - details.length)), ...conclusion]);
   }
   if (!candidates.length) candidates = [makePlan("Story", analysis.title || analysis.brand, analysis.description)];
-  const selected = selectPlans(candidates, count);
+  const cleaned = candidates.filter((plan) => !footerNoise.test(`${plan.headline} ${plan.supportingText}`));
+  const selected = selectPlans(cleaned.length ? cleaned : candidates, count);
   // Scorvik's copy voice (see copy-voice.ts): soft questions at the open and close, one message per scene.
   const language = /^n[bo]?/i.test(analysis.language ?? "") ? "no" : (options.locale ?? "en");
   const seed = analysis.brand || analysis.title;

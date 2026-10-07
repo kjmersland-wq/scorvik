@@ -80,6 +80,14 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   const [copyTone, setCopyTone] = useState<"auto" | "warm" | "bluesy" | "playful" | "elegant">("auto");
   const [rewriting, setRewriting] = useState(false);
   const [fillingVisuals, setFillingVisuals] = useState(false);
+  const [stockSources, setStockSources] = useState<{ pixabay: boolean; unsplash: boolean; pexels: boolean } | null>(null);
+  const [useVideo, setUseVideo] = useState(true);
+  const [replaceSitePictures, setReplaceSitePictures] = useState(false);
+  const [autoFill, setAutoFill] = useState(true);
+  const [fillNote, setFillNote] = useState("");
+  useEffect(() => {
+    void fetch("/api/stock").then((response) => response.json()).then((data: { sources?: { pixabay: boolean; unsplash: boolean; pexels: boolean } }) => { if (data.sources) setStockSources(data.sources); }).catch(() => {});
+  }, []);
   const [project, setProject] = useState<VideoProject | null>(null);
   const [renderPercent, setRenderPercent] = useState(0);
   const [renderError, setRenderError] = useState("");
@@ -165,6 +173,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       setCreativeBrief(nextBrief);
       setScenes(nextScenes);
       void polishInBackground(nextScenes, nextAnalysis, copyTone, false, mode);
+      if (autoFill && stockSources && (stockSources.pixabay || stockSources.pexels || stockSources.unsplash)) void fillVisualsFromStock(nextScenes);
       setSettings((current) => ({
         ...current,
         duration: result.storyboard.totalDuration,
@@ -218,20 +227,36 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     return words.join(" ") || analysis?.brand || "";
   }
 
-  // Fills pictures the site couldn't provide with matching stock (site screenshots and photos always win).
-  async function fillVisualsFromStock() {
+  // Adds pictures and video from every connected library (Pixabay, Pexels, Unsplash). The site's own photos stay unless you ask to replace them.
+  async function fillVisualsFromStock(list: StoryScene[] = scenes) {
     setFillingVisuals(true);
-    const targets = scenes.filter((scene) => scene.visualSource !== "website-image" && scene.visualQuery);
-    for (const scene of targets) {
+    setFillNote("");
+    let clips = 0;
+    let pictures = 0;
+    const used = new Set<string>();
+    for (const scene of list) {
+      if (!scene.visualQuery || scene.purpose === "CTA") continue;
+      if (scene.visualSource === "website-image" && !replaceSitePictures) continue;
       try {
-        const response = await fetch(`/api/stock?q=${encodeURIComponent(scene.visualQuery ?? "")}&kind=image&lang=en`);
-        const data = await response.json() as { items?: StockItem[] };
-        const item = data.items?.find((candidate) => candidate.width >= candidate.height);
-        if (item) pickStock(scene.id, item);
+        let item: StockItem | undefined;
+        if (useVideo && clips < 3) {
+          const response = await fetch(`/api/stock?q=${encodeURIComponent(scene.visualQuery)}&kind=video&lang=en`);
+          const data = await response.json() as { items?: StockItem[] };
+          item = data.items?.find((candidate) => candidate.width >= candidate.height && !used.has(candidate.url));
+          if (item) clips += 1;
+        }
+        if (!item) {
+          const response = await fetch(`/api/stock?q=${encodeURIComponent(scene.visualQuery)}&kind=image&lang=en`);
+          const data = await response.json() as { items?: StockItem[] };
+          item = data.items?.find((candidate) => candidate.width >= candidate.height && !used.has(candidate.url));
+          if (item) pictures += 1;
+        }
+        if (item) { used.add(item.url); pickStock(scene.id, item); }
       } catch {
         // leave the scene as it was
       }
     }
+    setFillNote(locale === "no" ? `La til ${clips} videoklipp og ${pictures} bilder fra arkivene.` : `Added ${clips} video clips and ${pictures} pictures from the libraries.`);
     setFillingVisuals(false);
   }
 
@@ -382,7 +407,14 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           </div>
           <div className="settings-section"><label>{locale === "no" ? "Tekstanimasjon" : "Text motion"}</label>
             <div className="choice-row">{([["calm", "Rolig", "Calm"], ["kinetic", "Kinetisk (ord for ord)", "Kinetic (word by word)"]] as const).map(([id, no, en]) => <button key={id} type="button" className={`choice ${(settings.typography ?? (settings.style === "Energetic" ? "kinetic" : "calm")) === id ? "selected" : ""}`} onClick={() => updateSetting("typography", id)}>{locale === "no" ? no : en}</button>)}</div>
-            <button type="button" className="button button-light button-small" disabled={fillingVisuals} onClick={() => void fillVisualsFromStock()}>{fillingVisuals ? (locale === "no" ? "Henter bilder…" : "Finding pictures…") : (locale === "no" ? "Fyll manglende bilder fra arkivet" : "Fill missing pictures from the library")}</button>
+          </div>
+          <div className="settings-section"><label>{locale === "no" ? "Bilder og video fra arkivene" : "Pictures and video from the libraries"}</label>
+            <p className="field-caption">{stockSources ? [["Pexels", stockSources.pexels], ["Unsplash", stockSources.unsplash], ["Pixabay", stockSources.pixabay]].map(([name, on]) => `${name} ${on ? "✓" : "–"}`).join("  ·  ") : "…"}</p>
+            <label><input type="checkbox" checked={autoFill} onChange={(event) => setAutoFill(event.target.checked)} /> {locale === "no" ? "Fyll automatisk etter analysen" : "Fill automatically after the analysis"}</label>
+            <label><input type="checkbox" checked={useVideo} onChange={(event) => setUseVideo(event.target.checked)} /> {locale === "no" ? "Bruk videoklipp (mer bevegelse)" : "Use video clips (more motion)"}</label>
+            <label><input type="checkbox" checked={replaceSitePictures} onChange={(event) => setReplaceSitePictures(event.target.checked)} /> {locale === "no" ? "Bytt også sidens egne bilder" : "Replace the site's own pictures too"}</label>
+            <button type="button" className="button button-light button-small" disabled={fillingVisuals} onClick={() => void fillVisualsFromStock()}>{fillingVisuals ? (locale === "no" ? "Henter bilder og video…" : "Finding pictures and video…") : (locale === "no" ? "Legg til bilder og video nå" : "Add pictures and video now")}</button>
+            {fillNote && <p className="field-caption" role="status">{fillNote}</p>}
           </div>
           <div className="settings-section"><label><input type="checkbox" checked={settings.enhanceImages !== false} onChange={(event) => updateSetting("enhanceImages", event.target.checked)} /> {locale === "no" ? "Forbedre bildene (skarphet, lys og farger)" : "Enhance pictures (sharpness, light and colour)"}</label></div>
           <div className="settings-section"><label htmlFor="language">{text.language}</label><select id="language" value={settings.language} onChange={(event) => { const language = event.target.value; updateSetting("language", language); updateSetting("voice", language === "Norsk" ? text.voices.no[0] : text.voices.en[0]); }}>{text.languageOptions.map((language) => <option key={language}>{language}</option>)}</select></div>
