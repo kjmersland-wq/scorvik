@@ -211,8 +211,8 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
 
   function pickStock(id: string, item: StockItem) {
     changeScene(id, item.kind === "video"
-      ? { visual: item.previewUrl || item.url, videoUrl: item.url, credit: undefined }
-      : { visual: item.url, videoUrl: undefined, credit: item.source === "unsplash" ? item.credit : undefined });
+      ? { visual: item.previewUrl || item.url, videoUrl: item.url, credit: item.source === "pexels" ? `${item.credit} / Pexels` : undefined }
+      : { visual: item.url, videoUrl: undefined, credit: item.source === "unsplash" || item.source === "pexels" ? `${item.credit} / ${item.source === "unsplash" ? "Unsplash" : "Pexels"}` : undefined });
     if (item.downloadLocation) void fetch("/api/stock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ downloadLocation: item.downloadLocation }) }).catch(() => {});
     setStockScene(null);
   }

@@ -1,3 +1,4 @@
+import { pixabayMusic } from "./pixabay-library.ts";
 import type { CreativeBrief, FilmMode, MusicTrack, SiteAnalysis } from "@/types/project";
 
 export const localMusicFiles = [
@@ -104,7 +105,8 @@ function trackFromFilename(filename: (typeof localMusicFiles)[number]): MusicTra
 }
 
 export const scorvikOriginalMusic: MusicTrack[] = localMusicFiles.map(trackFromFilename);
-export const demoMusicCatalog = scorvikOriginalMusic;
+export const libraryMusic: MusicTrack[] = [...scorvikOriginalMusic, ...pixabayMusic];
+export const demoMusicCatalog = libraryMusic;
 
 export interface MusicRecommendationInput {
   analysis: SiteAnalysis;
@@ -229,7 +231,7 @@ function scoreTrack(track: MusicTrack, input: MusicRecommendationInput, inferred
 
 export function recommendMusic(
   input: MusicRecommendationInput,
-  catalog: MusicTrack[] = scorvikOriginalMusic,
+  catalog: MusicTrack[] = libraryMusic,
   options: MusicRankingOptions = {},
 ): RankedMusicTrack[] {
   const category = input.analysis.brandProfile?.category ?? "other";

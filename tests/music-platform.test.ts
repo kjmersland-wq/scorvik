@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fitMusicToVideo, musicGainWithVoiceDucking, prepareAudioTimeline } from "../src/lib/audio/mix.ts";
 import { getPlatformPreset, getPlatformPresets, platformPresets, validatePlatformOutput } from "../src/lib/platforms/presets.ts";
-import { demoMusicCatalog, isClearedRoyaltyFreeTrack, localMusicFiles, recommendMusic } from "../src/lib/music/recommend.ts";
+import { demoMusicCatalog, isClearedRoyaltyFreeTrack, localMusicFiles, recommendMusic, scorvikOriginalMusic } from "../src/lib/music/recommend.ts";
 import { findTaxonomyEntry, moodChoices, musicTaxonomy } from "../src/lib/music/taxonomy.ts";
 import { createCreativeBrief, detectBrandProfile } from "../src/lib/creative/create-brief.ts";
 import type { SiteAnalysis } from "../src/types/project.ts";
@@ -38,12 +38,13 @@ test("music ranking is deterministic, brand-sensitive and respects explicit genr
   assert.ok(bluesOnly.every((item) => item.track.genre === "Blues"));
   const bluesMood = bluesOnly.find((item) => item.track.mood[0] === "Blues");
   assert.ok(bluesMood);
-  assert.deepEqual([bluesMood.track.id, ...bluesMood.alternatives.map((track) => track.id)].sort(), ["blues-60-ad", "blues-60-ad-2", "blues-65-ad", "blues-65-ad-2"]);
+  const bluesIds = [bluesMood.track.id, ...bluesMood.alternatives.map((track) => track.id)];
+  for (const id of ["blues-60-ad", "blues-60-ad-2", "blues-65-ad", "blues-65-ad-2", "aurec-blues-587560", "nickpanek-kansas-blues-blues-rock-instrumental-259874"]) assert.ok(bluesIds.includes(id), id);
   const guideRecommendations = recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "instruction" });
   assert.ok(guideRecommendations.length > 0);
   assert.ok(guideRecommendations.every((item) => item.track.usage === "guide"));
   const modernGuide = guideRecommendations.find((item) => item.track.mood[0] === "Modern");
-  assert.equal(modernGuide?.alternatives.length, 2);
+  assert.ok((modernGuide?.alternatives.length ?? 0) >= 2);
   assert.ok(recommendMusic({ analysis: site, brief, duration: 30, platform: "youtube", mode: "advert" }).some((item) => item.alternatives.length > 0));
 });
 
@@ -89,9 +90,11 @@ test("audio planning preserves layer timing, fades, ducking, and does not claim 
 });
 
 test("Scorvik Original tracks preserve structured metadata and are cleared for commercial use", () => {
-  assert.equal(demoMusicCatalog.length, 19);
-  assert.deepEqual(demoMusicCatalog.map((track) => track.audioUrl?.replace("/music/", "")).sort(), [...localMusicFiles].sort());
-  assert.ok(demoMusicCatalog.every((track) => track.sourceType === "scorvik-original" && track.metadataStatus === "verified" && track.voiceoverSuitable && track.tempoBpm !== null && isClearedRoyaltyFreeTrack(track, "youtube")));
+  assert.equal(scorvikOriginalMusic.length, 19);
+  assert.ok(demoMusicCatalog.length >= 60, "library includes the Pixabay tracks");
+  assert.ok(demoMusicCatalog.filter((track) => track.genre === "Blues").length >= 10, "blues tracks are present");
+  assert.deepEqual(scorvikOriginalMusic.map((track) => track.audioUrl?.replace("/music/", "")).sort(), [...localMusicFiles].sort());
+  assert.ok(scorvikOriginalMusic.every((track) => track.sourceType === "scorvik-original" && track.metadataStatus === "verified" && track.voiceoverSuitable && track.tempoBpm !== null && isClearedRoyaltyFreeTrack(track, "youtube")));
   assert.equal(isClearedRoyaltyFreeTrack({ ...demoMusicCatalog[0], audioUrl: "https://audio.example/track.mp3" }, "youtube"), false);
   const verified = { ...demoMusicCatalog[0], metadataStatus: "verified" as const, commercialUse: true, licenseUrl: "https://license.example/terms", licenseCheckedAt: "2026-10-05T00:00:00.000Z", allowedPlatforms: ["youtube"] };
   assert.equal(isClearedRoyaltyFreeTrack(verified, "youtube-shorts"), true);

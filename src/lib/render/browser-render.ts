@@ -1,6 +1,6 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { fitMusicToVideo } from "@/lib/audio/mix";
-import { scorvikOriginalMusic } from "@/lib/music/recommend";
+import { libraryMusic } from "@/lib/music/recommend";
 import type { StoryScene, VideoFormat, VideoProject } from "@/types/project";
 import { normalizeSceneDurations, validateRenderProject } from "./validation";
 
@@ -529,7 +529,7 @@ function applyFinish(ctx: CanvasRenderingContext2D, finish: Finish, width: numbe
 
 async function renderMusic(project: VideoProject): Promise<AudioBuffer | undefined> {
   const mix = project.settings.audioMix?.music;
-  const track = project.settings.musicTrackId ? scorvikOriginalMusic.find((candidate) => candidate.id === project.settings.musicTrackId) : undefined;
+  const track = project.settings.musicTrackId ? libraryMusic.find((candidate) => candidate.id === project.settings.musicTrackId) : undefined;
   const volume = Math.min(1, Math.max(0, mix?.volume ?? 0.55));
   if (!track?.audioUrl || mix?.muted === true || volume <= 0) return undefined;
   const response = await fetch(track.audioUrl);
@@ -594,7 +594,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   let music: AudioBuffer | undefined;
   let audioWarning: string | undefined;
   try { music = await renderMusic(project); } catch (error) { audioWarning = error instanceof Error ? error.message : "Music could not be added."; }
-  if (music && !("AudioEncoder" in window && (await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: 2, bitrate: 128_000 })).supported)) {
+  if (music && !("AudioEncoder" in window && (await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: 2, bitrate: 192_000 })).supported)) {
     music = undefined;
     audioWarning = "This browser cannot encode audio, so the film has no music.";
   }
@@ -614,7 +614,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (error) => { failure = error; } });
   videoEncoder.configure(videoConfig);
   const audioEncoder = music ? new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: (error) => { failure = error; } }) : undefined;
-  audioEncoder?.configure({ codec: "mp4a.40.2", sampleRate, numberOfChannels: 2, bitrate: 128_000 });
+  audioEncoder?.configure({ codec: "mp4a.40.2", sampleRate, numberOfChannels: 2, bitrate: 192_000 });
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -625,7 +625,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const logo = await prepareLogo(project, width, height).catch(() => undefined);
   const finish = createFinish(ctx, width, height, project.settings.style === "Cinematic");
   const brand = project.analysis.brand || project.title;
-  const credits = (() => { const names = [...new Set(project.scenes.map((scene) => scene.credit).filter((value): value is string => Boolean(value)))]; return names.length ? `Photos: ${names.join(", ")} / Unsplash` : ""; })();
+  const credits = (() => { const names = [...new Set(project.scenes.map((scene) => scene.credit).filter((value): value is string => Boolean(value)))]; return names.length ? `Photos: ${names.join(", ")}` : ""; })();
   const address = (() => { try { return new URL(project.analysis.url).hostname.replace(/^www\./, ""); } catch { return project.analysis.url; } })();
   const starts: number[] = [];
   scenes.reduce((sum, scene) => { starts.push(sum); return sum + scene.duration; }, 0);

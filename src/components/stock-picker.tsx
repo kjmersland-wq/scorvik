@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Locale } from "@/lib/i18n/copy";
 import type { StockItem } from "@/lib/stock/search";
 
-interface Sources { pixabay: boolean; unsplash: boolean }
+interface Sources { pixabay: boolean; unsplash: boolean; pexels: boolean }
 
 export function StockPicker({ initialQuery, locale = "en", onPick, onClose }: { initialQuery: string; locale?: Locale; onPick: (item: StockItem) => void; onClose: () => void }) {
   const nb = locale === "no";
@@ -32,7 +32,7 @@ export function StockPicker({ initialQuery, locale = "en", onPick, onClose }: { 
     void fetch("/api/stock").then((response) => response.json()).then((data: { sources?: Sources }) => { if (data.sources) setSources(data.sources); }).catch(() => {});
   }, []);
 
-  const noKeys = sources && !sources.pixabay && !sources.unsplash;
+  const noKeys = sources && !sources.pixabay && !sources.unsplash && !sources.pexels;
 
   return <div className="stock-picker" role="dialog" aria-label={nb ? "Bilder og video fra arkiv" : "Stock pictures and video"}>
     <div className="stock-bar">
@@ -43,14 +43,14 @@ export function StockPicker({ initialQuery, locale = "en", onPick, onClose }: { 
     <div className="choice-row">
       {(["image", "video"] as const).map((value) => <button key={value} type="button" className={`choice ${kind === value ? "selected" : ""}`} aria-pressed={kind === value} onClick={() => { setKind(value); void search(query, value); }}>{value === "image" ? (nb ? "Bilder" : "Pictures") : (nb ? "Videoklipp" : "Video clips")}</button>)}
     </div>
-    {noKeys && <p className="field-caption">{nb ? "Legg inn PIXABAY_API_KEY (og gjerne UNSPLASH_ACCESS_KEY) i Vercel for å bruke arkivet." : "Add PIXABAY_API_KEY (and optionally UNSPLASH_ACCESS_KEY) in Vercel to use the library."}</p>}
+    {noKeys && <p className="field-caption">{nb ? "Legg inn PIXABAY_API_KEY, PEXELS_API_KEY eller UNSPLASH_ACCESS_KEY i Vercel for å bruke arkivet." : "Add PIXABAY_API_KEY, PEXELS_API_KEY or UNSPLASH_ACCESS_KEY in Vercel to use the library."}</p>}
     {state === "loading" && <p className="field-caption">{nb ? "Søker…" : "Searching…"}</p>}
     {state === "empty" && <p className="field-caption">{nb ? "Fant ingenting. Prøv et annet søkeord." : "Nothing found. Try another search."}</p>}
     {state === "error" && <p className="field-caption" role="alert">{nb ? "Søket feilet. Prøv igjen." : "The search failed. Try again."}</p>}
     <div className="stock-grid">{items.map((item) => <button type="button" key={`${item.source}-${item.id}`} className="stock-item" onClick={() => onPick(item)} title={`${item.credit} · ${item.source}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {item.previewUrl ? <img src={item.previewUrl} alt={item.credit} loading="lazy" /> : <span className="stock-noprev">{nb ? "Video" : "Video"}</span>}
-      <small>{item.kind === "video" ? "▶ " : ""}{item.source === "unsplash" ? "Unsplash" : "Pixabay"} · {item.credit}</small>
+      <small>{item.kind === "video" ? "▶ " : ""}{item.source === "unsplash" ? "Unsplash" : item.source === "pexels" ? "Pexels" : "Pixabay"} · {item.credit}</small>
     </button>)}</div>
   </div>;
 }

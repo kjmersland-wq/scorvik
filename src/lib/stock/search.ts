@@ -2,7 +2,7 @@
 
 export interface StockItem {
   id: string;
-  source: "pixabay" | "unsplash";
+  source: "pixabay" | "unsplash" | "pexels";
   kind: "image" | "video";
   previewUrl: string;
   /** full-quality image URL, or the mp4 URL for videos */
@@ -16,7 +16,7 @@ export interface StockItem {
 }
 
 export function stockSources() {
-  return { pixabay: Boolean(process.env.PIXABAY_API_KEY), unsplash: Boolean(process.env.UNSPLASH_ACCESS_KEY) };
+  return { pixabay: Boolean(process.env.PIXABAY_API_KEY), unsplash: Boolean(process.env.UNSPLASH_ACCESS_KEY), pexels: Boolean(process.env.PEXELS_API_KEY) };
 }
 
 const cache = new Map<string, { at: number; items: StockItem[] }>();
@@ -77,6 +77,33 @@ export async function searchUnsplash(query: string): Promise<StockItem[]> {
   return items;
 }
 
+interface PexelsPhoto { id: number; width: number; height: number; url: string; photographer: string; src: { medium: string; large: string; large2x: string } }
+interface PexelsVideoFile { link: string; width: number | null; height: number | null; file_type: string }
+interface PexelsVideo { id: number; width: number; height: number; url: string; image: string; user: { name: string }; video_files: PexelsVideoFile[] }
+
+export async function searchPexels(query: string, kind: "image" | "video"): Promise<StockItem[]> {
+  const key = process.env.PEXELS_API_KEY;
+  if (!key) return [];
+  const cacheKey = `pexels:${kind}:${query}`;
+  const hit = cached(cacheKey);
+  if (hit) return hit;
+  const headers = { Authorization: key };
+  let items: StockItem[];
+  if (kind === "image") {
+    const data = await getJson(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=12&orientation=landscape`, headers) as { photos?: PexelsPhoto[] };
+    items = (data.photos ?? []).map((photo): StockItem => ({ id: String(photo.id), source: "pexels", kind: "image", previewUrl: photo.src.medium, url: photo.src.large2x || photo.src.large, width: photo.width, height: photo.height, credit: photo.photographer, pageUrl: photo.url }));
+  } else {
+    const data = await getJson(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=9&orientation=landscape`, headers) as { videos?: PexelsVideo[] };
+    items = (data.videos ?? []).flatMap((clip): StockItem[] => {
+      const files = clip.video_files.filter((file) => file.file_type === "video/mp4" && (file.width ?? 0) >= 640 && (file.width ?? 0) <= 1920).sort((left, right) => Math.abs((left.width ?? 0) - 1280) - Math.abs((right.width ?? 0) - 1280));
+      const file = files[0];
+      return file ? [{ id: String(clip.id), source: "pexels", kind: "video", previewUrl: clip.image, url: file.link, width: file.width ?? clip.width, height: file.height ?? clip.height, credit: clip.user.name, pageUrl: clip.url }] : [];
+    });
+  }
+  cache.set(cacheKey, { at: Date.now(), items });
+  return items;
+}
+
 /** Unsplash requires a ping to the photo's download endpoint when it is used. */
 export async function trackUnsplashUse(downloadLocation: string): Promise<void> {
   const key = process.env.UNSPLASH_ACCESS_KEY;
@@ -84,4 +111,4 @@ export async function trackUnsplashUse(downloadLocation: string): Promise<void> 
   await fetch(downloadLocation, { headers: { Authorization: `Client-ID ${key}` }, signal: AbortSignal.timeout(8_000) }).catch(() => {});
 }
 
-export const allowedVideoHosts = [/^cdn\.pixabay\.com$/i, /^pixabay\.com$/i];
+export const allowedVideoHosts = [/^cdn\.pixabay\.com$/i, /^pixabay\.com$/i, /^videos\.pexels\.com$/i];
