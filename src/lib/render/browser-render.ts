@@ -128,7 +128,9 @@ async function prepareVisual(raw: ImageBitmap, width: number, height: number): P
   let image = raw;
   if (crop) { image = await createImageBitmap(raw, crop.sx, crop.sy, crop.sw, crop.sh); raw.close(); }
   const visible = Math.min(image.width / image.height / (width / height), height / width / (image.height / image.width));
-  if (visible >= 0.62) return { image };
+  const coverScale = Math.max(width / image.width, height / image.height);
+  // Needs heavy upscaling (soft, pixelated result) or heavy cropping: show it whole over a blurred backdrop instead.
+  if (visible >= 0.62 && coverScale <= 1.7) return { image };
   // Picture would lose too much when cropped: show it whole over a soft, darkened blow-up of itself, as an agency would.
   const tiny = document.createElement("canvas");
   tiny.width = 40;
@@ -154,10 +156,10 @@ function drawScene(ctx: CanvasRenderingContext2D, visual: Visual, scene: StorySc
   const { image, backdrop } = visual;
   if (backdrop) {
     ctx.drawImage(backdrop, 0, 0);
-    const fit = Math.min(width / image.width, (height * 0.92) / image.height) * (1 + (zoom - 1) * 0.5);
+    const fit = Math.min(width / image.width, (height * 0.7) / image.height, 1.5) * (1 + (zoom - 1) * 0.5);
     const w = image.width * fit;
     const h = image.height * fit;
-    ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+    ctx.drawImage(image, (width - w) / 2, (height - h) / 2 - height * 0.07, w, h); // lifted so titles sit below the picture
     return;
   }
   const cover = Math.max(width / image.width, height / image.height) * zoom;

@@ -1,3 +1,4 @@
+import { closingQuestion, focusHeadline, introQuestion } from "./copy-voice.ts";
 import type { CreativeBrief, ScenePurpose, SiteAnalysis, StoryScene, Storyboard } from "@/types/project";
 import type { FilmMode } from "@/types/project";
 
@@ -174,16 +175,14 @@ export function buildStoryboard(
   }
   if (!candidates.length) candidates = [makePlan("Story", analysis.title || analysis.brand, analysis.description)];
   const selected = selectPlans(candidates, count);
-  // Question-led, low-pressure copy in the spirit of Jeremy Miner's NEPQ: curiosity first, no hype, no invented claims.
+  // Scorvik's copy voice (see copy-voice.ts): soft questions at the open and close, one message per scene.
   const language = /^n[bo]?/i.test(analysis.language ?? "") ? "no" : (options.locale ?? "en");
-  const questions = language === "no"
-    ? { intro: (n: number) => `Hva om det bare tok ${n} enkle steg?`, close: "Høres det riktig ut for deg?" }
-    : { intro: (n: number) => `What if it only took ${n} simple steps?`, close: "Does that sound right for you?" };
+  const seed = analysis.brand || analysis.title;
   const plans = selected.map((plan, index) => {
     if (mode === "instruction" && extractedSteps.length >= 2 && extractedSteps.length <= 8 && index === 0 && plan.purpose === "Story" && sameSourceText(plan.headline, brief.suggestedHook)) {
-      return makePlan("Story", questions.intro(extractedSteps.length), plan.headline);
+      return makePlan("Story", introQuestion(language, extractedSteps.length, seed), plan.headline);
     }
-    if (plan.purpose === "CTA" && index === selected.length - 1) return makePlan("CTA", questions.close, plan.headline, plan.cta);
+    if (plan.purpose === "CTA" && index === selected.length - 1) return makePlan("CTA", closingQuestion(language, seed), plan.headline, plan.cta);
     return plan;
   });
   const maxSceneSeconds = 18;
@@ -204,8 +203,8 @@ export function buildStoryboard(
       order: index,
       purpose: plan.purpose,
       duration,
-      headline: concise(plan.headline, ""),
-      supportingText: concise(plan.supportingText, "", 110),
+      headline: concise(focusHeadline(plan.headline).headline, ""),
+      supportingText: concise(plan.supportingText || focusHeadline(plan.headline).rest, "", 110),
       ...(noOverlay ? { noOverlay: true } : {}),
       voiceover: plan.voiceover,
       transition: options.locale === "no"

@@ -23,3 +23,15 @@ test("a name is printed over the picture only when the image is tied to that nam
   const matched = rightBoard.scenes.find((scene) => scene.headline === "Memphis Minnie");
   if (matched) { assert.notEqual(matched.noOverlay, true); assert.equal(matched.visual, "https://blues.example/memphis-minnie.jpg"); }
 });
+
+import { closingQuestion, focusHeadline, introQuestion } from "../src/lib/creative/copy-voice.ts";
+
+test("copy voice keeps one message per scene and stays stable per brand", () => {
+  assert.deepEqual(focusHeadline("Short and clear"), { headline: "Short and clear", rest: "" });
+  const split = focusHeadline("Sosiale medier for restauranter, uten byrå – dere lager innholdet og vi skriver teksten til gjestene");
+  assert.equal(split.headline, "Sosiale medier for restauranter, uten byrå");
+  assert.match(split.rest, /^dere lager innholdet/);
+  assert.equal(introQuestion("no", 3, "Acme"), introQuestion("no", 3, "Acme"));
+  assert.match(introQuestion("en", 3, "Acme"), /3/);
+  assert.ok(closingQuestion("no", "Acme").endsWith("?"));
+});
