@@ -1,5 +1,6 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { fitMusicToVideo } from "@/lib/audio/mix";
+import { integratedLoudness } from "@/lib/audio/loudness";
 import { libraryMusic } from "@/lib/music/recommend";
 import type { StoryScene, VideoFormat, VideoProject } from "@/types/project";
 import { normalizeSceneDurations, validateRenderProject } from "./validation";
@@ -7,7 +8,7 @@ import { normalizeSceneDurations, validateRenderProject } from "./validation";
 // Renders a storyboard to an H.264/AAC MP4 inside the user's browser (WebCodecs + canvas), so no render server is needed.
 
 const frameRate = 24; // cinema/TV-spot cadence
-const crossfade = 0.7;
+const crossfade = 0.5; // 0.4-0.6 s: soft, never flashy
 const sampleRate = 48_000;
 
 const aspect: Record<VideoFormat, [number, number]> = { "16:9": [16, 9], "9:16": [9, 16], "1:1": [1, 1], "4:5": [4, 5] };
@@ -255,7 +256,7 @@ async function prepareVisual(raw: ImageBitmap, width: number, height: number, op
     image.close();
     return { image: enhanced.bitmap, backdrop, upscale: enhanced.scale };
   };
-  if (visible >= 0.62 && coverScale <= 1.7) return finish();
+  if (visible >= 0.7 && coverScale <= 1.7) return finish();
   // Picture would lose too much when cropped: show it whole over a soft, darkened blow-up of itself, as an agency would.
   const tiny = document.createElement("canvas");
   tiny.width = 40;
@@ -287,7 +288,9 @@ function drawScene(ctx: CanvasRenderingContext2D, visual: Visual, scene: StorySc
     const fit = Math.min(width / iw, (height * 0.7) / ih, 1.5 / (visual.upscale ?? 1)) * (1 + (zoom - 1) * 0.5);
     const w = iw * fit;
     const h = ih * fit;
-    ctx.drawImage(source, (width - w) / 2, (height - h) / 2 - height * 0.07, w, h); // lifted so titles sit below the picture
+    // slow 3% sideways drift keeps even whole-picture shots alive; lifted so titles sit below the picture
+    const drift = (progress - 0.5) * width * 0.03 * (index % 2 === 0 ? 1 : -1);
+    ctx.drawImage(source, (width - w) / 2 + drift, (height - h) / 2 - height * 0.07, w, h);
     return;
   }
   const cover = Math.max(width / iw, height / ih) * zoom;
@@ -321,7 +324,7 @@ function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: numbe
   const headline = scene.headline.trim();
   const support = scene.supportingText.trim() && scene.supportingText.trim() !== headline ? scene.supportingText.trim() : "";
   if (!headline && !support) return;
-  const appear = ease((local - 0.25) / 0.7) * ease((duration - local) / 0.35) * (1 - hide);
+  const appear = ease((local - 0.2) / 0.3) * ease((duration - local) / 0.35) * (1 - hide); // type animates in over 0.3 s, then holds
   if (appear <= 0) return;
   const short = Math.min(width, height);
   const maxWidth = width * (width > height ? 0.62 : 0.84);
@@ -336,7 +339,8 @@ function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: numbe
   ctx.font = `400 ${supportSize}px ${textFamily}`;
   const supportLines = support ? wrap(ctx, support, maxWidth).slice(0, 2) : [];
   const blockHeight = headLines.length * headSize * 1.15 + (supportLines.length ? supportSize * 0.9 + supportLines.length * supportSize * 1.35 : 0);
-  const baseline = height - inset - short * 0.085;
+  // Vertical films keep titles above the platform's bottom UI zone (about the lower 20%).
+  const baseline = height > width ? height - Math.max(inset, height * 0.2) - short * 0.03 : height - inset - short * 0.085;
   const top = baseline - blockHeight;
   const rise = (1 - appear) * headSize * 0.4;
 
@@ -398,6 +402,41 @@ async function prepareLogo(project: VideoProject, width: number, height: number)
       context.globalCompositeOperation = "source-in";
       context.fillStyle = "#fff";
       context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas;
+    }
+    // Detailed logos: lift them so the mark reads at roughly 70-85% brightness on the dark title card.
+    const histogram = new Uint32Array(256);
+    for (let i = 0; i < pixels.length; i += 4) if (pixels[i + 3] >= 128) histogram[Math.round(0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2])] += 1;
+    let seen = 0;
+    let p90 = 255;
+    for (let value = 0; value < 256; value += 1) { seen += histogram[value]; if (seen >= opaque * 0.9) { p90 = value; break; } }
+    let lifted = p90;
+    if (opaque > 0 && p90 < 190 && p90 > 8) {
+      const factor = Math.min(2.4, 205 / p90);
+      const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < frame.data.length; i += 4) {
+        frame.data[i] = frame.data[i] * factor;
+        frame.data[i + 1] = frame.data[i + 1] * factor;
+        frame.data[i + 2] = frame.data[i + 2] * factor;
+      }
+      context.putImageData(frame, 0, 0);
+      lifted = p90 * factor;
+    }
+    // Still too dark after lifting: set it on a soft light plate so it never disappears.
+    if (opaque > 0 && lifted < 120) {
+      const pad = Math.round(Math.min(canvas.width, canvas.height) * 0.1);
+      const plate = document.createElement("canvas");
+      plate.width = canvas.width + pad * 2;
+      plate.height = canvas.height + pad * 2;
+      const plateContext = plate.getContext("2d");
+      if (plateContext) {
+        plateContext.fillStyle = "rgba(244,238,228,0.94)";
+        plateContext.beginPath();
+        plateContext.roundRect(0, 0, plate.width, plate.height, pad);
+        plateContext.fill();
+        plateContext.drawImage(canvas, pad, pad);
+        return plate;
+      }
     }
     return canvas;
   }
@@ -405,13 +444,19 @@ async function prepareLogo(project: VideoProject, width: number, height: number)
 }
 
 // Opening card: the film starts dimmed with the logo (or brand name) fading in, then lifting into the first scene.
-function drawIntro(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | undefined, brand: string, width: number, height: number, amount: number) {
+function drawIntro(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | undefined, brand: string, width: number, height: number, amount: number, progress: number) {
   if (amount <= 0) return;
   const short = Math.min(width, height);
-  ctx.globalAlpha = amount * 0.8;
+  ctx.globalAlpha = amount * 0.5;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, width, height);
   ctx.globalAlpha = amount;
+  // slow push-in on the lockup, 100% to 108%
+  ctx.save();
+  const push = 1 + 0.08 * Math.min(1, Math.max(0, progress));
+  ctx.translate(width / 2, height / 2);
+  ctx.scale(push, push);
+  ctx.translate(-width / 2, -height / 2);
   if (logo) {
     ctx.drawImage(logo, (width - logo.width) / 2, (height - logo.height) / 2 - short * 0.03);
     ctx.fillStyle = "rgba(255,255,255,0.85)";
@@ -434,6 +479,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | unde
     ctx.fillText(text, width / 2 + short * 0.01, height / 2);
     tracking(ctx, "0px");
   }
+  ctx.restore();
   ctx.globalAlpha = 1;
 }
 
@@ -506,8 +552,8 @@ function createFinish(ctx: CanvasRenderingContext2D, width: number, height: numb
 function applyFinish(ctx: CanvasRenderingContext2D, finish: Finish, width: number, height: number, frame: number) {
   ctx.globalCompositeOperation = "soft-light";
   const grade = ctx.createLinearGradient(0, 0, 0, height);
-  grade.addColorStop(0, "rgba(30,90,120,0.28)");
-  grade.addColorStop(1, "rgba(170,100,40,0.28)");
+  grade.addColorStop(0, "rgba(30,90,120,0.16)"); // lighter grade so brand colours (gold, burgundy) stay true
+  grade.addColorStop(1, "rgba(170,100,40,0.18)");
   ctx.fillStyle = grade;
   ctx.fillRect(0, 0, width, height);
   ctx.globalCompositeOperation = "source-over";
@@ -520,6 +566,11 @@ function applyFinish(ctx: CanvasRenderingContext2D, finish: Finish, width: numbe
     ctx.fillRect(-256, -256, width + 256, height + 256);
     ctx.restore();
   }
+  // Lift the shadows: nothing in the picture is darker than #12100e, so blacks are never crushed.
+  ctx.globalCompositeOperation = "lighten";
+  ctx.fillStyle = "#12100e";
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = "source-over";
   if (finish.letterbox > 0) {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, width, finish.letterbox);
@@ -549,12 +600,32 @@ async function renderMusic(project: VideoProject): Promise<AudioBuffer | undefin
   node.buffer = source;
   if (loop) { node.loop = true; node.loopStart = fit.startSeconds; node.loopEnd = source.duration; }
   gain.gain.setValueAtTime(0, 0);
-  gain.gain.linearRampToValueAtTime(volume, Math.max(fadeIn, 0.01));
-  gain.gain.setValueAtTime(volume, Math.max(fadeIn, audible - fadeOut));
+  gain.gain.linearRampToValueAtTime(1, Math.max(fadeIn, 0.01));
+  gain.gain.setValueAtTime(1, Math.max(fadeIn, audible - fadeOut));
   gain.gain.linearRampToValueAtTime(0, audible);
   node.connect(gain).connect(offline.destination);
   node.start(0, fit.startSeconds, audible);
-  return offline.startRendering();
+  const rendered = await offline.startRendering();
+  normalizeLoudness(rendered, volume);
+  return rendered;
+}
+
+// Targets about -14 LUFS integrated at the default music level (the volume slider moves it up or down from there),
+// and keeps the peak under -1.5 dBFS so the AAC encode never clips.
+function normalizeLoudness(buffer: AudioBuffer, volume: number) {
+  const channels = [buffer.getChannelData(0), buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1))];
+  const measured = integratedLoudness(channels, buffer.sampleRate);
+  if (!Number.isFinite(measured)) return;
+  const target = -14 + 20 * Math.log10(Math.max(0.05, volume) / 0.55);
+  let gain = Math.pow(10, (target - measured) / 20);
+  let peak = 0;
+  for (const channel of channels) for (let i = 0; i < channel.length; i += 1) peak = Math.max(peak, Math.abs(channel[i]));
+  const ceiling = Math.pow(10, -1.5 / 20);
+  if (peak * gain > ceiling) gain = ceiling / peak;
+  for (let c = 0; c < buffer.numberOfChannels; c += 1) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < data.length; i += 1) data[i] *= gain;
+  }
 }
 
 async function encodeAudio(buffer: AudioBuffer, encoder: AudioEncoder, signal?: AbortSignal) {
@@ -655,14 +726,16 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       }
       applyFinish(ctx, finish, width, height, frame);
       const isLast = current === scenes.length - 1;
-      const cardWindow = Math.min(3, scene.duration * 0.65);
-      const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.8) : 0;
+      // end card is fully readable for at least 2.5 s before the closing fade
+      const cardWindow = Math.min(3.6, scene.duration * 0.75);
+      const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.5) : 0;
       const introLength = Math.min(3, totalDuration * 0.2);
       const introAmount = current === 0 ? ease(local / 0.5) * (1 - ease((local - (introLength - 0.7)) / 0.7)) : 0;
       if (showText) drawText(ctx, scene, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount));
-      drawIntro(ctx, logo, brand, width, height, introAmount);
+      drawIntro(ctx, logo, brand, width, height, introAmount, current === 0 ? local / introLength : 0);
       drawEndCard(ctx, logo, brand, address, credits, width, height, endAmount);
-      const fade = Math.max(Math.min(1, 1 - time / 0.4), Math.min(1, 1 - (totalDuration - time) / 0.6), 0);
+      // First frame is already readable (never pure black); the picture is up within 0.4 s and the film only fades in the last 0.4 s.
+      const fade = Math.max(Math.min(0.5, 1 - time / 0.4), Math.min(1, 1 - (totalDuration - time) / 0.4), 0);
       if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, fade)})`; ctx.fillRect(0, 0, width, height); }
 
       const videoFrame = new VideoFrame(canvas, { timestamp: Math.round((frame / frameRate) * 1e6), duration: Math.round(1e6 / frameRate) });
