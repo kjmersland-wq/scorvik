@@ -642,3 +642,10 @@ body::before {
 .brand-mark { width: 56px; height: 56px; flex: 0 0 56px; }
 .brand-wordmark { display: block; font-size: 16px; line-height: 1.1; white-space: nowrap; }
 .brand-wordmark small { display: block; }
+
+.music-pick { margin: 0 0 12px; padding: 12px 14px; border: 1px solid #f06445; border-radius: 2px; background: #1d1412; }
+.music-pick-main { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.music-pick-main > span:not(.track-wave) { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.music-pick-main b { color: #eee7df; }
+.music-pick-main small { color: #a99f97; }
+.music-pick-reasons { margin: 10px 0 0; padding-left: 18px; color: #cfc5bc; font-size: 11px; line-height: 1.6; }

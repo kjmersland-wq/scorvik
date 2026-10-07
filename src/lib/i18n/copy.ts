@@ -112,7 +112,7 @@ export const copy = {
     },
     music: {
       eyebrow: "A soundtrack for your story", title: "How do you want it to feel?", description: "Start with a feeling. We’ll find a few sounds that fit.",
-      feel: "Feel", recommended: "For your story", genres: "Genres", saved: "Saved", noTrack: "No sound chosen yet", chooseMood: "Choose a feeling to get started", clear: "Clear",
+      bestPick: "Recommended song for this film", usePick: "Use this song", picked: "Chosen", feel: "Feel", recommended: "For your story", genres: "Genres", saved: "Saved", noTrack: "No sound chosen yet", chooseMood: "Choose a feeling to get started", clear: "Clear",
       browse: "Browse music by feeling or sound", findGenre: "Find a genre", allGenres: "A little of everything", search: "Search sounds, genres, or moods", findSound: "Find a sound",
       nothingSaved: "Nothing saved just yet. Save a track and it will be waiting here.", nothingFits: "Nothing quite fits yet. Try another feeling or browse genres.",
       moods: { Warm: "Warm", Bold: "Bold", Calm: "Calm", Energetic: "Energetic", Cinematic: "Cinematic", Playful: "Playful", Elegant: "Elegant", Emotional: "Emotional", Modern: "Modern", Nostalgic: "Nostalgic", Adventurous: "Adventurous", Authentic: "Authentic" },
@@ -231,7 +231,7 @@ export const copy = {
     },
     music: {
       eyebrow: "Lydspor til historien", title: "Hvilket uttrykk passer?", description: "Velg en stemning. Motoren finner forslag som passer tonen.",
-      feel: "Stemning", recommended: "Til historien", genres: "Sjangre", saved: "Lagret", noTrack: "Ingen lyd valgt", chooseMood: "Velg en stemning for å begynne", clear: "Fjern",
+      bestPick: "Anbefalt låt til denne filmen", usePick: "Bruk denne låten", picked: "Valgt", feel: "Stemning", recommended: "Til historien", genres: "Sjangre", saved: "Lagret", noTrack: "Ingen lyd valgt", chooseMood: "Velg en stemning for å begynne", clear: "Fjern",
       browse: "Finn musikk etter stemning eller uttrykk", findGenre: "Velg sjanger", allGenres: "Alle sjangre", search: "Søk etter lyd, sjanger eller stemning", findSound: "Finn lyd",
       nothingSaved: "Du har ikke lagret noe ennå.", nothingFits: "Fant ingen passende spor. Prøv en annen stemning eller sjanger.",
       moods: { Warm: "Varm", Bold: "Tydelig", Calm: "Rolig", Energetic: "Energisk", Cinematic: "Filmatisk", Playful: "Leken", Elegant: "Elegant", Emotional: "Følsom", Modern: "Moderne", Nostalgic: "Nostalgisk", Adventurous: "Eventyrlig", Authentic: "Ekte" },

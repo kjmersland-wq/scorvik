@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CreativeBrief, FilmMode, MusicTrack, SiteAnalysis } from "@/types/project";
+import type { CreativeBrief, FilmMode, MusicTrack, SiteAnalysis, StoryScene } from "@/types/project";
 import { demoMusicCatalog, recommendMusic } from "@/lib/music/recommend";
 import { moodChoices, musicTaxonomy } from "@/lib/music/taxonomy";
 import { getCopy, type Locale } from "@/lib/i18n/copy";
@@ -14,12 +14,30 @@ interface MusicStudioProps {
   onSelect: (trackId: string | null) => void;
   locale?: Locale;
   mode?: FilmMode;
+  scenes?: StoryScene[];
+}
+
+function localizeReason(reason: string, locale: Locale): string {
+  if (locale !== "no") return reason;
+  const rules: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
+    [/^(.+) mood matches the brief/, (m) => `Stemningen «${m[1]}» passer til filmens uttrykk`],
+    [/^Matches the selected mood/, () => "Passer stemningen du valgte"],
+    [/^Genre fits the brand tone/, () => "Sjangeren passer merkevarens tone"],
+    [/^(\d+) BPM is close/, (m) => `${m[1]} BPM passer tempoet i filmen`],
+    [/^Tags relate to storyboard/, () => "Passer ordene og temaene i storyboardet"],
+    [/^Instrumental options/, () => "Instrumental musikk fungerer best under tale"],
+    [/^Suitable under voiceover/, () => "Egnet under fortellerstemme"],
+    [/^Track length fits/, () => "Lengden passer filmen"],
+    [/^Strong Scorvik Original/, () => "Sterk match med Scorvik Original"],
+  ];
+  for (const [pattern, build] of rules) { const match = reason.match(pattern); if (match) return build(match); }
+  return reason;
 }
 
 const tabs = ["Moods", "Recommended", "Genres", "Favorites"] as const;
 type Tab = typeof tabs[number];
 
-export function MusicStudio({ analysis, brief, duration, selectedTrackId, onSelect, locale = "en", mode = "advert" }: MusicStudioProps) {
+export function MusicStudio({ analysis, brief, duration, selectedTrackId, onSelect, locale = "en", mode = "advert", scenes }: MusicStudioProps) {
   const text = getCopy(locale).music;
   const [tab, setTab] = useState<Tab>("Moods");
   const [genre, setGenre] = useState("");
@@ -29,7 +47,9 @@ export function MusicStudio({ analysis, brief, duration, selectedTrackId, onSele
   const [query, setQuery] = useState("");
   const [versions, setVersions] = useState<Record<string, string>>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recommendations = useMemo(() => recommendMusic({ analysis, brief, duration, platform: "youtube", mode, userMoods: moods, genrePreference: genre || null }), [analysis, brief, duration, mode, moods, genre]);
+  const recommendations = useMemo(() => recommendMusic({ analysis, brief, duration, platform: "youtube", mode, userMoods: moods, genrePreference: genre || null, storyboard: scenes ? { scenes } : undefined }), [analysis, brief, duration, mode, moods, genre, scenes]);
+  const best = recommendations[0];
+  const bestReasons = best ? [...new Set(best.matchReasons.map((reason) => localizeReason(reason, locale)))].slice(0, 3) : [];
   const filteredTracks = recommendations.filter(({ track }) => {
     if (tab === "Favorites" && !favorites.includes(track.id)) return false;
     const search = query.trim().toLowerCase();
@@ -92,6 +112,11 @@ export function MusicStudio({ analysis, brief, duration, selectedTrackId, onSele
 
   return <div className="music-studio">
     <div className="music-heading"><div><span className="eyebrow">{text.eyebrow}</span><h3>{text.title}</h3><p>{text.description}</p></div><span className="tag">MUSIC / 01</span></div>
+    {best && <div className="music-pick" aria-label={text.bestPick}>
+      <span className="eyebrow">{text.bestPick}</span>
+      <div className="music-pick-main"><button className="track-play" aria-label={`${playingId === best.track.id ? (locale === "no" ? "Sett på pause" : "Pause") : (locale === "no" ? "Spill av" : "Play")} ${best.track.title}`} onClick={() => void togglePlayback(best.track)}><span className={`track-wave ${playingId === best.track.id ? "playing" : ""}`} aria-hidden="true">{[0,1,2,3,4].map((bar) => <i key={bar}/>)}</span></button><span><b>{best.track.title}</b><small>{best.track.genre} · {best.track.mood.slice(0, 2).join(" · ")}</small></span><button className={`choice ${selectedTrackId === best.track.id ? "selected" : ""}`} onClick={() => onSelect(best.track.id)} disabled={selectedTrackId === best.track.id}>{selectedTrackId === best.track.id ? text.picked : text.usePick}</button></div>
+      {bestReasons.length > 0 && <ul className="music-pick-reasons">{bestReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
+    </div>}
     <div className="music-selected"><span className="music-note" aria-hidden="true">♫</span><span><b>{selected?.title ?? text.noTrack}</b><small>{selected ? `${selected.genre} · ${selected.mood.slice(0, 2).join(" · ")}` : text.chooseMood}</small></span><button className="choice" onClick={() => onSelect(null)} disabled={!selected}>{text.clear}</button></div>
     <div className="music-tabs" role="tablist" aria-label={text.browse}>{tabs.map((item) => <button role="tab" aria-selected={tab === item} className={tab === item ? "active" : ""} onClick={() => setTab(item)} key={item}>{tabLabels[item]}</button>)}</div>
     {tab === "Genres" && <div className="music-filters"><label className="music-select-label">{text.findGenre}<select value={genre} onChange={(event) => setGenre(event.target.value)}><option value="">{text.allGenres}</option>{musicTaxonomy.map((entry) => <optgroup key={entry.genre} label={entry.genre}>{entry.subgenres.map((subgenre) => <option key={subgenre} value={subgenre}>{subgenre}</option>)}</optgroup>)}</select></label><label className="music-search"><span className="sr-only">{text.search}</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.findSound} /></label></div>}
