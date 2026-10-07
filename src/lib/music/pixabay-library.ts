@@ -2,11 +2,12 @@
 // Pixabay Content License: free for commercial use, no attribution required.
 import type { MusicTrack } from "@/types/project";
 
-interface Row { file: string; title: string; artist: string; genre: string; subgenre: string; moods: string[]; usage: "ad" | "guide"; energy: number; vocals: boolean; duration: number }
+interface Row { file: string; tempoBpm: number | null; title: string; artist: string; genre: string; subgenre: string; moods: string[]; usage: "ad" | "guide"; energy: number; vocals: boolean; duration: number }
 
 const rows: Row[] = [
   {
     "file": "no-copyright-music-2026-piano-background-music-611657.mp3",
+    "tempoBpm": null,
     "title": "Piano Background",
     "artist": "No Copyright Music",
     "genre": "Orchestral",
@@ -22,6 +23,7 @@ const rows: Row[] = [
   },
   {
     "file": "no-copyright-music-2026-corporate-background-611659.mp3",
+    "tempoBpm": 80,
     "title": "Corporate Background",
     "artist": "No Copyright Music",
     "genre": "Electronic",
@@ -37,6 +39,7 @@ const rows: Row[] = [
   },
   {
     "file": "kiravale-background-music-for-video-593669.mp3",
+    "tempoBpm": 97,
     "title": "Background for Video",
     "artist": "Kiravale",
     "genre": "Cinematic",
@@ -52,6 +55,7 @@ const rows: Row[] = [
   },
   {
     "file": "gr0za-background-music-background-610368.mp3",
+    "tempoBpm": 125,
     "title": "Soft Background",
     "artist": "Gr0za",
     "genre": "Electronic",
@@ -67,6 +71,7 @@ const rows: Row[] = [
   },
   {
     "file": "verclub_music-timelapse-background-609007.mp3",
+    "tempoBpm": 100,
     "title": "Timelapse Background",
     "artist": "Verclub Music",
     "genre": "Electronic",
@@ -82,6 +87,7 @@ const rows: Row[] = [
   },
   {
     "file": "folk_tales-calm-carefree_56sec-610080.mp3",
+    "tempoBpm": 90,
     "title": "Calm Carefree (56 s)",
     "artist": "Folk Tales",
     "genre": "Acoustic / Folk",
@@ -97,6 +103,7 @@ const rows: Row[] = [
   },
   {
     "file": "folk_tales-calm-carefree_22sec-610084.mp3",
+    "tempoBpm": null,
     "title": "Calm Carefree (22 s)",
     "artist": "Folk Tales",
     "genre": "Acoustic / Folk",
@@ -112,6 +119,7 @@ const rows: Row[] = [
   },
   {
     "file": "folk_tales-calm-carefree_12sec-610085.mp3",
+    "tempoBpm": null,
     "title": "Calm Carefree (12 s)",
     "artist": "Folk Tales",
     "genre": "Acoustic / Folk",
@@ -127,6 +135,7 @@ const rows: Row[] = [
   },
   {
     "file": "folk_tales-beautiful-beautiful-things_60sec-610064.mp3",
+    "tempoBpm": 120,
     "title": "Beautiful Things",
     "artist": "Folk Tales",
     "genre": "Acoustic / Folk",
@@ -142,6 +151,7 @@ const rows: Row[] = [
   },
   {
     "file": "no-copyright-music-2026-emotional-cello-611670.mp3",
+    "tempoBpm": null,
     "title": "Emotional Cello",
     "artist": "No Copyright Music",
     "genre": "Cinematic",
@@ -157,6 +167,7 @@ const rows: Row[] = [
   },
   {
     "file": "leberch-film-underscore-254392.mp3",
+    "tempoBpm": 103,
     "title": "Film Underscore",
     "artist": "Leberch",
     "genre": "Cinematic",
@@ -172,6 +183,7 @@ const rows: Row[] = [
   },
   {
     "file": "smooth-fade-out.mp3",
+    "tempoBpm": null,
     "title": "Smooth Fade Out",
     "artist": "Scorvik Library",
     "genre": "Electronic",
@@ -187,6 +199,7 @@ const rows: Row[] = [
   },
   {
     "file": "smooth-fade-out-2.mp3",
+    "tempoBpm": null,
     "title": "Smooth Fade Out II",
     "artist": "Scorvik Library",
     "genre": "Electronic",
@@ -202,6 +215,7 @@ const rows: Row[] = [
   },
   {
     "file": "alex-morgan-blues-jazz-coffee-shop-552788.mp3",
+    "tempoBpm": 84,
     "title": "Blues Jazz Coffee Shop",
     "artist": "Alex Morgan",
     "genre": "Jazz",
@@ -217,6 +231,7 @@ const rows: Row[] = [
   },
   {
     "file": "alex-morgan-blues-jazz-sunny-cafe-552795.mp3",
+    "tempoBpm": null,
     "title": "Blues Jazz Sunny Café",
     "artist": "Alex Morgan",
     "genre": "Jazz",
@@ -232,6 +247,7 @@ const rows: Row[] = [
   },
   {
     "file": "alex-morgan-blues-jazz-restaurant-552796.mp3",
+    "tempoBpm": null,
     "title": "Blues Jazz Restaurant",
     "artist": "Alex Morgan",
     "genre": "Jazz",
@@ -247,6 +263,7 @@ const rows: Row[] = [
   },
   {
     "file": "alec_koff-blues-ballad-487408.mp3",
+    "tempoBpm": null,
     "title": "Blues Ballad",
     "artist": "Alec Koff",
     "genre": "Blues",
@@ -263,6 +280,7 @@ const rows: Row[] = [
   },
   {
     "file": "aurec-blues-587560.mp3",
+    "tempoBpm": null,
     "title": "Blues",
     "artist": "Aurec",
     "genre": "Blues",
@@ -278,6 +296,7 @@ const rows: Row[] = [
   },
   {
     "file": "shwarzborg-delta-blues-387901.mp3",
+    "tempoBpm": null,
     "title": "Delta Blues",
     "artist": "Shwarzborg",
     "genre": "Blues",
@@ -293,6 +312,7 @@ const rows: Row[] = [
   },
   {
     "file": "nickpanek-blues-rock-instrumental-69-259289.mp3",
+    "tempoBpm": null,
     "title": "Blues Rock Instrumental",
     "artist": "Nick Panek",
     "genre": "Blues",
@@ -308,6 +328,7 @@ const rows: Row[] = [
   },
   {
     "file": "nickpanek-cat-on-the-porch-rock-blues-instrumental-275925.mp3",
+    "tempoBpm": 92,
     "title": "Cat on the Porch",
     "artist": "Nick Panek",
     "genre": "Blues",
@@ -323,6 +344,7 @@ const rows: Row[] = [
   },
   {
     "file": "nickpanek-kansas-blues-blues-rock-instrumental-259874.mp3",
+    "tempoBpm": null,
     "title": "Kansas Blues",
     "artist": "Nick Panek",
     "genre": "Blues",
@@ -338,6 +360,7 @@ const rows: Row[] = [
   },
   {
     "file": "tablues.mp3",
+    "tempoBpm": 120,
     "title": "Tablues",
     "artist": "Scorvik Library",
     "genre": "Blues",
@@ -352,6 +375,7 @@ const rows: Row[] = [
   },
   {
     "file": "35285074-reconsider-baby-145892.mp3",
+    "tempoBpm": 85,
     "title": "Reconsider Baby",
     "artist": "Pixabay",
     "genre": "Blues",
@@ -367,6 +391,7 @@ const rows: Row[] = [
   },
   {
     "file": "alex-morgan-movie-wide-screen-panorama-578501.mp3",
+    "tempoBpm": null,
     "title": "Wide Screen Panorama",
     "artist": "Alex Morgan",
     "genre": "Cinematic",
@@ -382,6 +407,7 @@ const rows: Row[] = [
   },
   {
     "file": "leberch-film-594952.mp3",
+    "tempoBpm": null,
     "title": "Film",
     "artist": "Leberch",
     "genre": "Cinematic",
@@ -397,6 +423,7 @@ const rows: Row[] = [
   },
   {
     "file": "the_mountain-film-591388.mp3",
+    "tempoBpm": null,
     "title": "Film",
     "artist": "The Mountain",
     "genre": "Cinematic",
@@ -412,6 +439,7 @@ const rows: Row[] = [
   },
   {
     "file": "no-copyright-music-2026-inspiring-611650.mp3",
+    "tempoBpm": null,
     "title": "Inspiring",
     "artist": "No Copyright Music",
     "genre": "Cinematic",
@@ -427,6 +455,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-motivation-motivation-music-611031.mp3",
+    "tempoBpm": 104,
     "title": "Motivation",
     "artist": "LN Plus Music",
     "genre": "Cinematic",
@@ -442,6 +471,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-advertising-advertising-music-610971.mp3",
+    "tempoBpm": 145,
     "title": "Advertising",
     "artist": "LN Plus Music",
     "genre": "Electronic",
@@ -457,6 +487,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-product-product-launch-611921.mp3",
+    "tempoBpm": 100,
     "title": "Product Launch",
     "artist": "LN Plus Music",
     "genre": "Electronic",
@@ -472,6 +503,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-happy-happy-music-611028.mp3",
+    "tempoBpm": 108,
     "title": "Happy",
     "artist": "LN Plus Music",
     "genre": "Electronic",
@@ -487,6 +519,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-event-event-music-611920.mp3",
+    "tempoBpm": 137,
     "title": "Event",
     "artist": "LN Plus Music",
     "genre": "Electronic",
@@ -502,6 +535,7 @@ const rows: Row[] = [
   },
   {
     "file": "no-copyright-music-2026-corporate-611644.mp3",
+    "tempoBpm": 146,
     "title": "Corporate",
     "artist": "No Copyright Music",
     "genre": "Electronic",
@@ -517,6 +551,7 @@ const rows: Row[] = [
   },
   {
     "file": "no-copyright-music-2026-corporate-corporate-music-611643.mp3",
+    "tempoBpm": 160,
     "title": "Corporate Music",
     "artist": "No Copyright Music",
     "genre": "Electronic",
@@ -532,6 +567,7 @@ const rows: Row[] = [
   },
   {
     "file": "gr0za-upbeat-upbeat-music-610413.mp3",
+    "tempoBpm": 120,
     "title": "Upbeat",
     "artist": "Gr0za",
     "genre": "Electronic",
@@ -547,6 +583,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-travel-travel-music-611925.mp3",
+    "tempoBpm": 118,
     "title": "Travel",
     "artist": "LN Plus Music",
     "genre": "World",
@@ -562,6 +599,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-indian-indian-music-611803.mp3",
+    "tempoBpm": 107,
     "title": "Indian",
     "artist": "LN Plus Music",
     "genre": "World",
@@ -577,6 +615,7 @@ const rows: Row[] = [
   },
   {
     "file": "folk_tales-country-countryside_67sec-610096.mp3",
+    "tempoBpm": 100,
     "title": "Countryside (67 s)",
     "artist": "Folk Tales",
     "genre": "Acoustic / Folk",
@@ -592,6 +631,7 @@ const rows: Row[] = [
   },
   {
     "file": "folk_tales-country-countryside_51sec-610098.mp3",
+    "tempoBpm": 100,
     "title": "Countryside (51 s)",
     "artist": "Folk Tales",
     "genre": "Acoustic / Folk",
@@ -607,6 +647,7 @@ const rows: Row[] = [
   },
   {
     "file": "folk_tales-country-countryside_41sec-610099.mp3",
+    "tempoBpm": 100,
     "title": "Countryside (41 s)",
     "artist": "Folk Tales",
     "genre": "Acoustic / Folk",
@@ -622,6 +663,7 @@ const rows: Row[] = [
   },
   {
     "file": "gr0za-racing-racing-music-610347.mp3",
+    "tempoBpm": 100,
     "title": "Racing",
     "artist": "Gr0za",
     "genre": "Electronic",
@@ -637,6 +679,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-car-car-music-611883.mp3",
+    "tempoBpm": 117,
     "title": "Car",
     "artist": "LN Plus Music",
     "genre": "Electronic",
@@ -652,6 +695,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-driving-car-automotive-music-611929.mp3",
+    "tempoBpm": 80,
     "title": "Driving Automotive",
     "artist": "LN Plus Music",
     "genre": "Electronic",
@@ -667,6 +711,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-funk-funk-music-611911.mp3",
+    "tempoBpm": 76,
     "title": "Funk",
     "artist": "LN Plus Music",
     "genre": "Soul / R&B",
@@ -682,6 +727,7 @@ const rows: Row[] = [
   },
   {
     "file": "jonasblakewood-rock-rock-music-611689.mp3",
+    "tempoBpm": 80,
     "title": "Rock",
     "artist": "Jonas Blakewood",
     "genre": "Rock",
@@ -697,6 +743,7 @@ const rows: Row[] = [
   },
   {
     "file": "jonasblakewood-rock-upbeat-611688.mp3",
+    "tempoBpm": null,
     "title": "Rock Upbeat",
     "artist": "Jonas Blakewood",
     "genre": "Rock",
@@ -712,6 +759,7 @@ const rows: Row[] = [
   },
   {
     "file": "lnplusmusic-rap-rap-beat-611918.mp3",
+    "tempoBpm": 107,
     "title": "Rap Beat",
     "artist": "LN Plus Music",
     "genre": "Hip-Hop",
@@ -727,6 +775,7 @@ const rows: Row[] = [
   },
   {
     "file": "gr0za-trap-trap-beat-610220.mp3",
+    "tempoBpm": 150,
     "title": "Trap Beat",
     "artist": "Gr0za",
     "genre": "Hip-Hop",
@@ -742,6 +791,7 @@ const rows: Row[] = [
   },
   {
     "file": "no-copyright-music-2026-hip-hop-hip-hop-beat-611663.mp3",
+    "tempoBpm": 150,
     "title": "Hip-Hop Beat",
     "artist": "No Copyright Music",
     "genre": "Hip-Hop",
@@ -772,7 +822,7 @@ export const pixabayMusic: MusicTrack[] = rows.map((row): MusicTrack => ({
   mood: row.moods,
   tags: [...row.moods, row.genre, row.subgenre],
   energy: row.energy,
-  tempoBpm: null,
+  tempoBpm: row.tempoBpm,
   instrumentation: [],
   era: "Contemporary",
   vocals: row.vocals,

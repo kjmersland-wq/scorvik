@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       return result ? NextResponse.json({ scenes: result }) : NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
     }
     if (body.task === "polish" && typeof body.brand === "string" && typeof body.source === "string") {
-      const result = await polishScenes(body.brand.slice(0, 120), body.source.slice(0, 6000), scenes, tone);
+      const result = await polishScenes(body.brand.slice(0, 120), body.source.slice(0, 6000), scenes, tone, body.mode === "instruction" ? "instruction" : "advert");
       return result ? NextResponse.json({ scenes: result }) : NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
     }
   } catch (error) {

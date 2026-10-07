@@ -28,6 +28,10 @@ export interface StoryScene {
   visual: string;
   /** true when the text names someone/something that no image can be tied to, so it must not be printed over the picture */
   noOverlay?: boolean;
+  /** words to highlight when the caption animates; chosen from the scene's tone */
+  typography?: { emphasis: string[] };
+  /** English search phrase for stock libraries (Pexels/Unsplash/Pixabay) */
+  visualQuery?: string;
   /** stock video clip (same-origin proxied mp4) drawn instead of a still */
   videoUrl?: string;
   /** photographer credit shown on the end card when the source requires it (Unsplash) */
@@ -181,6 +185,8 @@ export interface VideoSettings {
   showTextOnScreen?: boolean;
   /** sharpen, level and upscale pictures before filming (default on) */
   enhanceImages?: boolean;
+  /** on-screen text motion: calm (fade and rise) or kinetic (word pop-in, highlights) */
+  typography?: "calm" | "kinetic";
   /** writing style chosen by the user (warm, bluesy, playful, elegant); unset = detect from the site */
   copyTone?: string;
   format: VideoFormat;

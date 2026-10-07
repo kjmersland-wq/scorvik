@@ -207,6 +207,10 @@ function scoreTrack(track: MusicTrack, input: MusicRecommendationInput, inferred
       reasons.push("Tags relate to storyboard source language");
     }
   }
+  if (input.mode !== "instruction" && input.brief.suggestedPacing === "fast" && track.energy !== null && track.energy >= 6) {
+    score += 5;
+    reasons.push("High-energy track for a fast-paced promo");
+  }
   if (input.mode === "instruction" && ["Calm", "Quiet", "Warm"].includes(track.mood[0])) {
     score += 14;
     reasons.push("Calm music keeps attention on the steps");

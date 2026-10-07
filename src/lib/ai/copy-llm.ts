@@ -8,6 +8,12 @@ export interface CopyScene {
   supportingText: string;
   /** locked scenes (opening/closing questions) are returned unchanged when polishing */
   locked?: boolean;
+  /** the scene's job in the story (hook, problem, offer, proof, close, or step n) */
+  role?: string;
+  /** 0-2 words of the headline to highlight */
+  emphasis?: string[];
+  /** English phrase for stock footage search */
+  visualQuery?: string;
 }
 
 export const copyLanguages: Record<string, string> = {
@@ -22,6 +28,9 @@ export const copyLanguages: Record<string, string> = {
 const defaultModel = "claude-haiku-4-5-20251001";
 const headlineLimit = 70;
 const supportLimit = 120;
+
+/** Words that read as hype and erode trust: never printed. */
+export const hypeWords = /\b(ultimate|best[- ]in[- ]class|the best|revolutionary|game[- ]?changer|world[- ]class|unbeatable|cutting[- ]edge|#1|number one|beste|verdens beste|revolusjonerende|uslåelig|toppmoderne)\b/i;
 
 function words(text: string): string[] {
   return text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? [];
@@ -49,9 +58,9 @@ export function passesFactGuard(output: string, source: string): boolean {
 
 export function validateScenes(output: unknown, input: CopyScene[], source: string, translate: boolean): CopyScene[] | undefined {
   if (!Array.isArray(output)) return undefined;
-  const byId = new Map<string, { headline?: unknown; supportingText?: unknown }>();
+  const byId = new Map<string, { headline?: unknown; supportingText?: unknown; emphasis?: unknown; visualQuery?: unknown }>();
   for (const item of output) {
-    if (item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string") byId.set((item as { id: string }).id, item as { headline?: unknown; supportingText?: unknown });
+    if (item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string") byId.set((item as { id: string }).id, item as { headline?: unknown; supportingText?: unknown; emphasis?: unknown; visualQuery?: unknown });
   }
   const sceneSource = [source, ...input.flatMap((scene) => [scene.headline, scene.supportingText])].join(" ");
   return input.map((scene) => {
@@ -59,10 +68,13 @@ export function validateScenes(output: unknown, input: CopyScene[], source: stri
     if (!next || (scene.locked && !translate)) return scene;
     const headline = typeof next.headline === "string" ? next.headline.trim() : "";
     const supportingText = typeof next.supportingText === "string" ? next.supportingText.trim() : "";
-    const acceptable = headline && headline.length <= headlineLimit && supportingText.length <= supportLimit
+    const acceptable = headline && !(!translate && hypeWords.test(`${headline} ${supportingText}`)) && headline.length <= headlineLimit && supportingText.length <= supportLimit
       && (translate ? numbers(`${headline} ${supportingText}`).every((value) => numbers(`${scene.headline} ${scene.supportingText}`).includes(value))
         : passesFactGuard(`${headline} ${supportingText}`, sceneSource));
-    return acceptable ? { ...scene, headline, supportingText } : scene;
+    if (!acceptable) return scene;
+    const emphasis = Array.isArray(next.emphasis) ? next.emphasis.filter((word): word is string => typeof word === "string" && word.length > 1 && headline.toLowerCase().includes(word.toLowerCase())).slice(0, 2) : scene.emphasis;
+    const query = typeof next.visualQuery === "string" && /^[a-z0-9 ,'-]{3,60}$/i.test(next.visualQuery.trim()) ? next.visualQuery.trim() : scene.visualQuery;
+    return { ...scene, headline, supportingText, emphasis, visualQuery: query };
   });
 }
 
@@ -110,7 +122,7 @@ const toneNotes: Record<CopyTone, string> = {
   elegant: "Calm, refined and understated, with plenty of space between the words.",
 };
 
-function polishSystem(tone: CopyTone): string {
+function polishSystem(tone: CopyTone, mode: "advert" | "instruction"): string {
   return `You write the on-screen text for short website films. It must never sound like AI or like an advert: it should sound like one real person talking to another.
 Voice: personal, warm and positive, always. Speak directly to the viewer (natural "du"/"dere" in Norwegian, "you" in English). ${toneNotes[tone]}
 Style rules:
@@ -118,16 +130,42 @@ Style rules:
 - Positive framing: lead with what the viewer gains or enjoys.
 - Avoid AI and marketing clichés: "unlock", "elevate", "seamless", "leverage", "game-changer", "revolutionary", "in today's world", "whether you're", "dive into", "journey", stacked triplets, and long dash-chains. No exclamation marks, no emoji, no hashtags.
 - In Norwegian use natural bokmål that reads as written by a person, not translated.
+- Story structure by role (each scene has a "role"):
+${mode === "instruction" ? "  goal = state what the viewer wants to achieve, in their own words, as a short question or wish; you are their guide, they are the hero.\n  step n = one action, verb first, plain words, no jargon, the order is clear (you may begin the supporting line with the step number in the film's language).\n  detail = one short clarifying fact.\n  close = locked." : "  hook = a pattern-interrupting line: a surprising, specific statement or question, at most 7 words.\n  problem = a calm, curious question that lets the viewer notice what carrying on as they are might cost them. Build it only from problems or benefits the site itself mentions and phrase it as a question, never as a claim or statistic.\n  offer = an ultra-clear, risk-free proposition: exactly what they get, in plain words. Mention a trial, guarantee or price only if the SOURCE states it.\n  proof = one concrete fact from the SOURCE.\n  close = locked."}
+- Never use hype words such as ultimate, best, revolutionary, game-changer or world-class.
+- Write for silent viewing: every scene is read in about two seconds. Rewrite, don't copy: turn the source into punchy, rhythmic lines (verb first, parallel rhythm, one concrete benefit or image per line). Headline at most 8 words, headline plus supporting line at most 12 words.
 Fact rules:
 - Use ONLY facts found in the SOURCE. Never invent numbers, prices, names, awards, guarantees, results or claims.
 - One idea per scene. Headline at most 8 words. Supporting line at most 16 words, or empty.
 - Keep the language of the source text.
 - Scenes marked locked:true must be returned exactly as given.
-- Return ONLY a JSON array of {"id","headline","supportingText"} for every scene, same ids, same order.`;
+- Also return "emphasis": 0-2 words copied exactly from your headline that carry the message (a number, a name or the key benefit), and "visualQuery": 2-4 English words describing matching stock footage. ${mode === "instruction" ? "This is an instructional film: prefer app or software screens, laptop close-ups, dashboards and hands using the product over generic lifestyle footage." : "Prefer concrete, human, on-brand imagery."}
+- Return ONLY a JSON array of {"id","headline","supportingText","emphasis","visualQuery"} for every scene, same ids, same order.`;
 }
 
-export async function polishScenes(brand: string, source: string, scenes: CopyScene[], tone: CopyTone = "warm"): Promise<CopyScene[] | undefined> {
-  const answer = await askClaude(polishSystem(tone), `BRAND: ${brand}\nSOURCE:\n${source.slice(0, 4000)}\n\nSCENES:\n${JSON.stringify(scenes)}`);
+/** The part each scene plays in the story, by position. */
+export function assignRoles(scenes: CopyScene[], mode: "advert" | "instruction"): string[] {
+  const count = scenes.length;
+  const problemScenes = Math.max(1, Math.floor((count - 2) * 0.4));
+  let step = 0;
+  return scenes.map((scene, index) => {
+    if (index === count - 1) return "close";
+    if (mode === "instruction") {
+      if (index === 0) return "goal";
+      if (scene.purpose === "Step") { step += 1; return `step ${step}`; }
+      return "detail";
+    }
+    if (index === 0) return "hook";
+    if (index <= problemScenes) return "problem";
+    if (index === problemScenes + 1) return "offer";
+    return "proof";
+  });
+}
+
+export async function polishScenes(brand: string, source: string, scenes: CopyScene[], tone: CopyTone = "warm", mode: "advert" | "instruction" = "advert"): Promise<CopyScene[] | undefined> {
+  const roles = assignRoles(scenes, mode);
+  const sent = scenes.map((scene, index) => ({ ...scene, role: roles[index] }));
+  const answer = await askClaude(polishSystem(tone, mode), `BRAND: ${brand}\nSOURCE:\n${source.slice(0, 4000)}\n\nSCENES:\n${JSON.stringify(sent)}`);
   const parsed = validateScenes(parseJsonArray(answer), scenes, `${brand} ${source}`, false);
   if (!parsed) throw new Error("Claude answered in an unexpected format.");
   return parsed;

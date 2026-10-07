@@ -1,4 +1,7 @@
+import { condenseCaption, highlightKeywords } from "./captions.ts";
 import { closingQuestion, focusHeadline, introQuestion } from "./copy-voice.ts";
+import { fitDurations, readingSeconds } from "./timing.ts";
+import { visualQueryFor } from "./visual-queries.ts";
 import type { CreativeBrief, ScenePurpose, SiteAnalysis, StoryScene, Storyboard } from "@/types/project";
 import type { FilmMode } from "@/types/project";
 
@@ -68,17 +71,6 @@ function selectPlans(plans: ScenePlan[], count: number): ScenePlan[] {
     return middle[position];
   });
   return [plans[0], ...selected, plans[plans.length - 1]];
-}
-
-function concise(value: string, fallback: string, limit = 84): string {
-  const text = value.trim().replace(/\s+/g, " ");
-  if (!text) return fallback;
-  if (text.length <= limit) return text;
-  const sentence = text.match(/^.+?[.!?](?=\s|$)/)?.[0];
-  if (sentence && sentence.length >= 12 && sentence.length <= limit) return sentence;
-  const cut = text.slice(0, limit - 1);
-  const space = cut.lastIndexOf(" ");
-  return `${(space > 20 ? cut.slice(0, space) : cut).trimEnd().replace(/[,;:–-]$/, "")}…`;
 }
 
 function sameSourceText(first: string, second: string): boolean {
@@ -187,11 +179,19 @@ export function buildStoryboard(
   });
   const maxSceneSeconds = 18;
   const totalDuration = Math.min(requestedDuration, Math.max(15, plans.length * maxSceneSeconds));
-  const perScene = Math.floor(totalDuration / plans.length);
-  let remainder = totalDuration - perScene * plans.length;
+  // On-screen words per scene: headline up to 8 words, headline + supporting line up to 12 (silent viewing needs short, punchy captions).
+  const captions = plans.map((plan) => {
+    const focused = focusHeadline(plan.headline);
+    const headline = condenseCaption(focused.headline, 8);
+    const support = condenseCaption(plan.supportingText || focused.rest, Math.max(0, 12 - headline.split(/\s+/).length));
+    return { headline, supportingText: support.split(/\s+/).filter(Boolean).length >= 2 ? support : "" };
+  });
+  // Every scene lasts long enough to read: about 2.5 words a second plus a second of padding.
+  const { durations } = fitDurations(captions.map((caption) => readingSeconds(`${caption.headline} ${caption.supportingText}`)), totalDuration);
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const scenes: StoryScene[] = plans.map((plan, index) => {
-    const duration = perScene + (remainder-- > 0 ? 1 : 0);
+    const duration = durations[index];
+    const caption = captions[index];
     const alts = analysis.imageAlts ?? {};
     const matched = plan.purpose === "CTA" ? undefined : analysis.images?.find((candidate) => imageMatchesText(alts[candidate], plan.headline));
     const image = matched ?? analysis.images?.[index];
@@ -203,8 +203,10 @@ export function buildStoryboard(
       order: index,
       purpose: plan.purpose,
       duration,
-      headline: concise(focusHeadline(plan.headline).headline, ""),
-      supportingText: concise(plan.supportingText || focusHeadline(plan.headline).rest, "", 110),
+      headline: caption.headline,
+      supportingText: caption.supportingText,
+      typography: { emphasis: highlightKeywords(caption.headline, language, 2) },
+      visualQuery: visualQueryFor(plan.purpose, analysis, mode),
       ...(noOverlay ? { noOverlay: true } : {}),
       voiceover: plan.voiceover,
       transition: options.locale === "no"

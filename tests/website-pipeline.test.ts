@@ -183,7 +183,9 @@ test("instructional duration recommendation follows extracted steps and preserve
   assert.equal(storyboard.requestedDuration, 120);
   assert.equal(storyboard.totalDuration, 120);
   assert.equal(storyboard.durationWithinTolerance, true);
-  assert.deepEqual(stepScenes.map((scene) => scene.headline), site.steps?.map((step) => step.title));
+  // captions are condensed to 8 words, but stay in order and start with the step's own words
+  assert.equal(stepScenes.length, site.steps?.length);
+  stepScenes.forEach((scene, index) => assert.ok(site.steps?.[index].title.startsWith(scene.headline.replace(/…$/, "").trim()), scene.headline));
   assert.equal(storyboard.scenes.at(-1)?.purpose, "CTA");
 });
 

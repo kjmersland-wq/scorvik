@@ -1,6 +1,8 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { fitMusicToVideo } from "@/lib/audio/mix";
 import { integratedLoudness } from "@/lib/audio/loudness";
+import { estimateBeatGrid, snapToBeats, type BeatGrid } from "@/lib/audio/beats";
+import { pickAccent } from "@/lib/creative/captions";
 import { libraryMusic } from "@/lib/music/recommend";
 import type { StoryScene, VideoFormat, VideoProject } from "@/types/project";
 import { normalizeSceneDurations, validateRenderProject } from "./validation";
@@ -327,6 +329,9 @@ const textFamily = '"Helvetica Neue", "Segoe UI", system-ui, Arial, sans-serif';
 const serifFamily = '"Playfair Display", "Cormorant Garamond", Georgia, "Times New Roman", serif';
 // Headlines use a display serif for the Editorial and Cinematic styles (set per render, see renderProjectInBrowser).
 let headlineFamily = textFamily;
+let accentColor = "#f3c767";
+let typographyMode: "calm" | "kinetic" = "calm";
+const easeOutBack = (value: number) => { const t = Math.max(0, Math.min(1, value)); const c1 = 1.70158; return 1 + (c1 + 1) * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
 const ease = (value: number) => { const v = Math.max(0, Math.min(1, value)); return v * v * (3 - 2 * v); };
 
 function tracking(ctx: CanvasRenderingContext2D, value: string) {
@@ -339,7 +344,8 @@ function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: numbe
   const headline = scene.headline.trim();
   const support = scene.supportingText.trim() && scene.supportingText.trim() !== headline ? scene.supportingText.trim() : "";
   if (!headline && !support) return;
-  const appear = ease((local - 0.2) / 0.3) * ease((duration - local) / 0.35) * (1 - hide); // type animates in over 0.3 s, then holds
+  const kinetic = typographyMode === "kinetic";
+  const appear = ease((local - (kinetic ? 0.1 : 0.2)) / (kinetic ? 0.12 : 0.3)) * ease((duration - local) / 0.35) * (1 - hide); // calm: fades in over 0.3 s; kinetic: the block is up at once and the words pop in
   if (appear <= 0) return;
   const short = Math.min(width, height);
   const maxWidth = width * (width > height ? 0.62 : 0.84);
@@ -367,12 +373,51 @@ function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: numbe
   ctx.fillStyle = gradient;
   ctx.fillRect(0, scrimTop, width, height - scrimTop);
   ctx.shadowColor = "rgba(0,0,0,0.5)";
-  ctx.shadowBlur = headSize * 0.3;
+  ctx.shadowBlur = headSize * (kinetic ? 0.45 : 0.3);
+  ctx.shadowOffsetY = kinetic ? headSize * 0.05 : 0;
   ctx.fillStyle = "#fff";
   let y = top + rise;
   tracking(ctx, "0.01em");
   ctx.font = `600 ${headSize}px ${headlineFamily}`;
-  for (const line of headLines) { y += headSize * 1.15; ctx.fillText(line, width / 2, y - headSize * 0.2); }
+  const emphasis = new Set((scene.typography?.emphasis ?? []).map((word) => word.toLowerCase()));
+  const space = ctx.measureText(" ").width;
+  let wordNumber = 0;
+  for (const line of headLines) {
+    y += headSize * 1.15;
+    const words = line.split(" ");
+    const widths = words.map((word) => ctx.measureText(word).width);
+    let x = width / 2 - (widths.reduce((sum, value) => sum + value, 0) + space * (words.length - 1)) / 2;
+    ctx.textAlign = "left";
+    for (const [index, word] of words.entries()) {
+      const hot = emphasis.has(word.toLowerCase().replace(/[^\p{L}\p{N}'’-]/gu, ""));
+      const age = local - (0.15 + wordNumber * 0.09); // each word pops in on its own, a beat after the last
+      const wordAppear = kinetic ? ease(age / 0.18) : 1;
+      const scale = kinetic ? 0.72 + 0.28 * easeOutBack(age / 0.3) : 1;
+      if (wordAppear > 0) {
+        const centre = x + widths[index] / 2;
+        const baselineY = y - headSize * 0.2;
+        ctx.save();
+        ctx.globalAlpha = appear * wordAppear;
+        ctx.translate(centre, baselineY);
+        ctx.scale(scale, scale);
+        ctx.textAlign = "center";
+        if (hot) { ctx.fillStyle = accentColor; ctx.shadowColor = accentColor; ctx.shadowBlur = headSize * 0.35; }
+        ctx.fillText(word, 0, 0);
+        if (hot && kinetic) { // the highlight underlines itself a moment after the word lands
+          ctx.shadowBlur = 0;
+          ctx.fillRect(-widths[index] / 2, headSize * 0.12, widths[index] * ease((age - 0.25) / 0.35), Math.max(2, headSize * 0.05));
+        }
+        ctx.restore();
+      }
+      x += widths[index] + space;
+      wordNumber += 1;
+    }
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = headSize * (kinetic ? 0.45 : 0.3);
+  }
+  ctx.globalAlpha = appear;
   if (supportLines.length) {
     tracking(ctx, "0.03em");
     ctx.font = `400 ${supportSize}px ${textFamily}`;
@@ -381,6 +426,7 @@ function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: numbe
     for (const line of supportLines) { y += supportSize * 1.35; ctx.fillText(line, width / 2, y - supportSize * 0.3); }
   }
   ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
   tracking(ctx, "0px");
   ctx.globalAlpha = 1;
 }
@@ -597,7 +643,7 @@ function applyFinish(ctx: CanvasRenderingContext2D, finish: Finish, width: numbe
   }
 }
 
-async function renderMusic(project: VideoProject): Promise<AudioBuffer | undefined> {
+async function renderMusic(project: VideoProject): Promise<{ buffer: AudioBuffer; grid?: BeatGrid } | undefined> {
   const mix = project.settings.audioMix?.music;
   const track = project.settings.musicTrackId ? libraryMusic.find((candidate) => candidate.id === project.settings.musicTrackId) : undefined;
   const volume = Math.min(1, Math.max(0, mix?.volume ?? 0.55));
@@ -626,7 +672,10 @@ async function renderMusic(project: VideoProject): Promise<AudioBuffer | undefin
   node.start(0, fit.startSeconds, audible);
   const rendered = await offline.startRendering();
   normalizeLoudness(rendered, volume);
-  return rendered;
+  // Beat grid of the track, moved onto the film's timeline (the film starts at fit.startSeconds inside the track).
+  const found = estimateBeatGrid(source.getChannelData(0), source.sampleRate);
+  const grid = found && found.confidence >= 0.35 ? { ...found, offset: (((found.offset - fit.startSeconds) % found.period) + found.period) % found.period } : undefined;
+  return { buffer: rendered, grid };
 }
 
 // Targets about -14 LUFS integrated at the default music level (the volume slider moves it up or down from there),
@@ -677,6 +726,8 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   }
   const totalDuration = project.settings.duration;
   const showText = project.settings.showTextOnScreen !== false;
+  accentColor = pickAccent(project.analysis.colors);
+  typographyMode = project.settings.typography ?? (project.settings.style === "Energetic" ? "kinetic" : "calm");
   headlineFamily = project.settings.style === "Editorial" || project.settings.style === "Cinematic" ? serifFamily : textFamily;
 
   const images = await loadSceneImages(project, width, height, signal);
@@ -684,7 +735,8 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
 
   let music: AudioBuffer | undefined;
   let audioWarning: string | undefined;
-  try { music = await renderMusic(project); } catch (error) { audioWarning = error instanceof Error ? error.message : "Music could not be added."; }
+  let beatGrid: BeatGrid | undefined;
+  try { const made = await renderMusic(project); music = made?.buffer; beatGrid = made?.grid; } catch (error) { audioWarning = error instanceof Error ? error.message : "Music could not be added."; }
   if (music && !("AudioEncoder" in window && (await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: 2, bitrate: 192_000 })).supported)) {
     music = undefined;
     audioWarning = "This browser cannot encode audio, so the film has no music.";
@@ -718,8 +770,13 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const brand = project.analysis.brand || project.title;
   const credits = (() => { const names = [...new Set(project.scenes.map((scene) => scene.credit).filter((value): value is string => Boolean(value)))]; return names.length ? `Photos: ${names.join(", ")}` : ""; })();
   const address = (() => { try { return new URL(project.analysis.url).hostname.replace(/^www\./, ""); } catch { return project.analysis.url; } })();
-  const starts: number[] = [];
-  scenes.reduce((sum, scene) => { starts.push(sum); return sum + scene.duration; }, 0);
+  // Beat-match: every cut lands on a bar line or beat of the chosen track, so scene lengths become whole beats and bars.
+  const plainStarts: number[] = [];
+  scenes.reduce((sum, scene) => { plainStarts.push(sum); return sum + scene.duration; }, 0);
+  // promos cut on the beat; instructional films breathe: bar lines only, longer shots
+  const instructional = project.settings.mode === "instruction";
+  const starts = beatGrid ? snapToBeats(plainStarts, beatGrid, totalDuration, instructional ? 0.9 : 0.5, instructional ? 3.5 : 2, 4, instructional) : plainStarts;
+  const timeline = scenes.map((scene, index) => ({ ...scene, duration: (starts[index + 1] ?? totalDuration) - starts[index] }));
   const frames = Math.round(totalDuration * frameRate);
 
   try {
@@ -728,15 +785,15 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       throwIfAborted(signal);
       if (failure) throw failure;
       const time = frame / frameRate;
-      while (current < scenes.length - 1 && time >= starts[current + 1]) current += 1;
-      const scene = scenes[current];
+      while (current < timeline.length - 1 && time >= starts[current + 1]) current += 1;
+      const scene = timeline[current];
       const local = time - starts[current];
       ctx.globalAlpha = 1;
       const currentClip = images[current].video;
       if (currentClip) await seekVideo(currentClip, local);
       drawScene(ctx, images[current], scene, current, local / scene.duration, width, height);
       const untilEnd = scene.duration - local;
-      if (current < scenes.length - 1 && untilEnd < crossfade) {
+      if (current < timeline.length - 1 && untilEnd < crossfade) {
         const next = current + 1;
         const blend = ease(1 - untilEnd / crossfade);
         ctx.globalAlpha = blend;
@@ -744,12 +801,12 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
         if (nextClip) await seekVideo(nextClip, 0);
         ctx.save();
         ctx.translate((1 - blend) * width * 0.03, 0); // the incoming shot glides in, soft and directional
-        drawScene(ctx, images[next], scenes[next], next, 0, width, height);
+        drawScene(ctx, images[next], timeline[next], next, 0, width, height);
         ctx.restore();
         ctx.globalAlpha = 1;
       }
       applyFinish(ctx, finish, width, height, frame);
-      const isLast = current === scenes.length - 1;
+      const isLast = current === timeline.length - 1;
       // end card is fully readable for at least 2.5 s before the closing fade
       const cardWindow = Math.min(3.6, scene.duration * 0.75);
       const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.5) : 0;

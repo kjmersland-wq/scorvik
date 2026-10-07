@@ -11,6 +11,7 @@ import { browserRenderSupported, renderProjectInBrowser } from "@/lib/render/bro
 import { saveVideo } from "@/lib/video-store";
 import { VersionsPanel } from "@/components/versions-panel";
 import { StockPicker } from "@/components/stock-picker";
+import { classifyIntent } from "@/lib/creative/intent";
 import type { StockItem } from "@/lib/stock/search";
 import type { CreativeBrief, FilmMode, ScenePurpose, SiteAnalysis, StoryScene, VideoFormat, VideoProject, VideoSettings } from "@/types/project";
 import { MusicStudio } from "@/components/music-studio";
@@ -78,6 +79,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   const [stockScene, setStockScene] = useState<string | null>(null);
   const [copyTone, setCopyTone] = useState<"auto" | "warm" | "bluesy" | "playful" | "elegant">("auto");
   const [rewriting, setRewriting] = useState(false);
+  const [fillingVisuals, setFillingVisuals] = useState(false);
   const [project, setProject] = useState<VideoProject | null>(null);
   const [renderPercent, setRenderPercent] = useState(0);
   const [renderError, setRenderError] = useState("");
@@ -107,23 +109,23 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   }
 
   // Optional: Claude tightens the wording (never adding facts). Silent when no API key is configured or the guard rejects a line.
-  async function polishInBackground(list: StoryScene[], site: SiteAnalysis, tone = copyTone, force = false) {
+  async function polishInBackground(list: StoryScene[], site: SiteAnalysis, tone = copyTone, force = false, mode: FilmMode = filmMode) {
     try {
       const source = [site.title, site.description, ...(site.headings ?? []), ...(site.subheadings ?? []), ...(site.steps ?? []).map((step) => `${step.title} ${step.description}`), (site.visibleText ?? "").slice(0, 2500)].join("\n");
       const response = await fetch("/api/copy", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ task: "polish", tone, brand: site.brand, source, scenes: list.map((scene, index) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText, locked: index === 0 || index === list.length - 1 })) }),
+        body: JSON.stringify({ task: "polish", tone, mode, brand: site.brand, source, scenes: list.map((scene, index) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText, locked: index === 0 || index === list.length - 1 })) }),
       });
       if (!response.ok) return;
-      const data = await response.json() as { scenes?: Array<{ id: string; headline: string; supportingText: string }> };
+      const data = await response.json() as { scenes?: Array<{ id: string; headline: string; supportingText: string; emphasis?: string[]; visualQuery?: string }> };
       const polished = data.scenes;
       if (!polished) return;
       setScenes((current) => current.map((scene) => {
         const next = polished.find((item) => item.id === scene.id);
         const before = list.find((item) => item.id === scene.id);
         // never overwrite text the user has already edited
-        return next && before && (force || (scene.headline === before.headline && scene.supportingText === before.supportingText)) ? { ...scene, headline: next.headline, supportingText: next.supportingText } : scene;
+        return next && before && (force || (scene.headline === before.headline && scene.supportingText === before.supportingText)) ? { ...scene, headline: next.headline, supportingText: next.supportingText, typography: { emphasis: next.emphasis ?? scene.typography?.emphasis ?? [] }, visualQuery: next.visualQuery ?? scene.visualQuery } : scene;
       }));
     } catch {
       // keep the template wording
@@ -132,6 +134,11 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
 
   async function analyzeUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await runAnalysis(filmMode);
+  }
+
+  async function runAnalysis(mode: FilmMode) {
+    setFilmMode(mode);
     setAnalysisError("");
     setIsAnalyzing(true);
     try {
@@ -140,8 +147,8 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           url,
-          mode: filmMode,
-          duration: filmMode === "instruction" && !durationWasChosen ? undefined : settings.duration,
+          mode,
+          duration: mode === "instruction" && !durationWasChosen ? undefined : settings.duration,
           platform: settings.platformPresetIds?.[0] ?? "youtube",
           language: settings.language,
         }),
@@ -157,7 +164,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       setAnalysis(nextAnalysis);
       setCreativeBrief(nextBrief);
       setScenes(nextScenes);
-      void polishInBackground(nextScenes, nextAnalysis);
+      void polishInBackground(nextScenes, nextAnalysis, copyTone, false, mode);
       setSettings((current) => ({
         ...current,
         duration: result.storyboard.totalDuration,
@@ -209,6 +216,23 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   function suggestQuery(scene: StoryScene) {
     const words = scene.headline.split(/\s+/).map((word) => word.replace(/[^\p{L}]/gu, "")).filter((word) => word.length >= 4).slice(0, 3);
     return words.join(" ") || analysis?.brand || "";
+  }
+
+  // Fills pictures the site couldn't provide with matching stock (site screenshots and photos always win).
+  async function fillVisualsFromStock() {
+    setFillingVisuals(true);
+    const targets = scenes.filter((scene) => scene.visualSource !== "website-image" && scene.visualQuery);
+    for (const scene of targets) {
+      try {
+        const response = await fetch(`/api/stock?q=${encodeURIComponent(scene.visualQuery ?? "")}&kind=image&lang=en`);
+        const data = await response.json() as { items?: StockItem[] };
+        const item = data.items?.find((candidate) => candidate.width >= candidate.height);
+        if (item) pickStock(scene.id, item);
+      } catch {
+        // leave the scene as it was
+      }
+    }
+    setFillingVisuals(false);
   }
 
   function pickStock(id: string, item: StockItem) {
@@ -324,6 +348,13 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         </section>
       </div>}
 
+      {stage === "storyboard" && analysis && (() => {
+        const guess = classifyIntent(analysis);
+        if (guess.intent === filmMode || guess.confidence < 0.6) return null;
+        const toInstruction = guess.intent === "instruction";
+        return <div className="panel panel-pad intent-hint" role="note"><p>{locale === "no" ? (toInstruction ? "Denne siden ser ut til å forklare noe steg for steg. En instruksjonsfilm kan passe bedre." : "Denne siden ser ut til å selge noe. En reklamefilm kan passe bedre.") : (toInstruction ? "This page looks like it explains a process. An instructional film may suit it better." : "This page looks like it sells something. A promo film may suit it better.")}</p><button type="button" className="button button-light button-small" disabled={isAnalyzing} onClick={() => void runAnalysis(guess.intent)}>{locale === "no" ? (toInstruction ? "Lag instruksjonsfilm" : "Lag reklamefilm") : (toInstruction ? "Make an instructional film" : "Make a promo film")}</button></div>;
+      })()}
+
       {stage === "storyboard" && analysis && <div className="studio-grid">
         <section className="panel panel-pad">
           <div className="panel-head"><div><h2>{text.titles.storyboard}</h2><small>{scenes.length} {text.scenes} · {scenes.reduce((sum, scene) => sum + scene.duration, 0)} {text.seconds} · {text.sampleLabel}</small></div><button className="button button-light button-small" onClick={() => setStage("website")}>{locale === "no" ? "Tilbake" : "Back"}</button></div>
@@ -333,7 +364,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="scene-list">{scenes.map((scene, index) => <article className="scene-row" key={scene.id}>
             <div className="scene-art" style={{ backgroundImage: `linear-gradient(0deg,#15231a44,transparent),url("${scene.visual}")` }} aria-label={locale === "no" ? `Bilde for scene ${index + 1}` : `Visual for scene ${index + 1}`} />
             <div className="scene-copy"><div className="scene-topline"><b>{String(index + 1).padStart(2, "0")}</b><select aria-label={locale === "no" ? `Hva scene ${index + 1} viser` : `What scene ${index + 1} shows`} value={scene.purpose} onChange={(event) => changeScene(scene.id, { purpose: event.target.value as ScenePurpose })}>{purposes.map((purpose) => <option key={purpose} value={purpose}>{purposeLabels[purpose]}</option>)}</select></div>
-              {editingScene === scene.id ? <><input className="field-control" aria-label={text.wordsOnScreen} value={scene.headline} onChange={(event) => changeScene(scene.id, { headline: event.target.value })}/><input className="field-control" aria-label={text.moreDetail} value={scene.supportingText} onChange={(event) => changeScene(scene.id, { supportingText: event.target.value })}/><textarea className="text-control" aria-label={text.wordsToSay} value={scene.voiceover} onChange={(event) => changeScene(scene.id, { voiceover: event.target.value })}/><div className="scene-edit-options"><label>{text.connectScenes}<select aria-label={text.connectScenes} value={scene.transition} onChange={(event) => changeScene(scene.id, { transition: event.target.value })}>{transitions.map((transition) => <option key={transition}>{transition}</option>)}</select></label><button className="button button-light button-small" onClick={() => changeVisual(scene.id)}>{text.tryImage} ↻</button><button className="button button-light button-small" type="button" onClick={() => setStockScene(stockScene === scene.id ? null : scene.id)}>{locale === "no" ? "Arkiv: bilder og video" : "Library: pictures and video"}</button></div>{stockScene === scene.id && <StockPicker locale={locale} initialQuery={suggestQuery(scene)} onPick={(item) => pickStock(scene.id, item)} onClose={() => setStockScene(null)} />}<button className="text-link scene-done" onClick={() => setEditingScene(null)}>{text.saveChanges}</button></> : <><h4>{scene.headline}</h4>{showTextOnScreen && <p>{scene.supportingText}</p>}<p>{scene.voiceover}</p><button className="text-link scene-edit" onClick={() => setEditingScene(scene.id)}>{text.changeScene}</button></>}
+              {editingScene === scene.id ? <><input className="field-control" aria-label={text.wordsOnScreen} value={scene.headline} onChange={(event) => changeScene(scene.id, { headline: event.target.value })}/><input className="field-control" aria-label={text.moreDetail} value={scene.supportingText} onChange={(event) => changeScene(scene.id, { supportingText: event.target.value })}/><textarea className="text-control" aria-label={text.wordsToSay} value={scene.voiceover} onChange={(event) => changeScene(scene.id, { voiceover: event.target.value })}/><div className="scene-edit-options"><label>{text.connectScenes}<select aria-label={text.connectScenes} value={scene.transition} onChange={(event) => changeScene(scene.id, { transition: event.target.value })}>{transitions.map((transition) => <option key={transition}>{transition}</option>)}</select></label><button className="button button-light button-small" onClick={() => changeVisual(scene.id)}>{text.tryImage} ↻</button><button className="button button-light button-small" type="button" onClick={() => setStockScene(stockScene === scene.id ? null : scene.id)}>{locale === "no" ? "Arkiv: bilder og video" : "Library: pictures and video"}</button></div>{stockScene === scene.id && <StockPicker locale={locale} initialQuery={scene.visualQuery ?? suggestQuery(scene)} onPick={(item) => pickStock(scene.id, item)} onClose={() => setStockScene(null)} />}<button className="text-link scene-done" onClick={() => setEditingScene(null)}>{text.saveChanges}</button></> : <><h4>{scene.headline}</h4>{showTextOnScreen && <p>{scene.supportingText}</p>}<p>{scene.voiceover}</p><button className="text-link scene-edit" onClick={() => setEditingScene(scene.id)}>{text.changeScene}</button></>}
             </div>
             <div className="scene-controls"><div><button title={locale === "no" ? "Flytt scenen opp" : "Move scene up"} aria-label={locale === "no" ? "Flytt scenen opp" : "Move scene up"} onClick={() => moveScene(index, -1)}>↑</button><button title={locale === "no" ? "Flytt scenen ned" : "Move scene down"} aria-label={locale === "no" ? "Flytt scenen ned" : "Move scene down"} onClick={() => moveScene(index, 1)}>↓</button></div><select aria-label={locale === "no" ? `Lengde på scene ${index + 1}` : `Duration of scene ${index + 1}`} value={scene.duration} onChange={(event) => changeScene(scene.id, { duration: Number(event.target.value) })}>{[3,4,5,6,7,8,10,12,15,20,25,30].map((duration) => <option key={duration} value={duration}>{duration} {text.seconds}</option>)}</select><div><button title={locale === "no" ? "Kopier scenen" : "Duplicate scene"} aria-label={locale === "no" ? "Kopier scenen" : "Duplicate scene"} onClick={() => { const duplicate = { ...scene, id: crypto.randomUUID() }; setScenes((current) => [...current.slice(0, index + 1), duplicate, ...current.slice(index + 1)]); }}>⧉</button><button title={locale === "no" ? "Fjern scenen" : "Remove scene"} aria-label={locale === "no" ? "Fjern scenen" : "Remove scene"} onClick={() => setScenes((current) => current.filter((item) => item.id !== scene.id))}>×</button></div></div>
           </article>)}</div>
@@ -348,6 +379,10 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="settings-section"><label>{locale === "no" ? "Tekststil" : "Writing style"}</label>
             <div className="choice-row">{([["auto", "Auto", "Auto"], ["warm", "Varm", "Warm"], ["bluesy", "Bluesy", "Bluesy"], ["playful", "Lekent", "Playful"], ["elegant", "Elegant", "Elegant"]] as const).map(([id, no, en]) => <button key={id} type="button" className={`choice ${copyTone === id ? "selected" : ""}`} aria-pressed={copyTone === id} onClick={() => setCopyTone(id)}>{locale === "no" ? no : en}</button>)}</div>
             <button type="button" className="button button-light button-small" disabled={rewriting || !analysis} onClick={async () => { if (!analysis) return; setRewriting(true); await polishInBackground(scenes, analysis, copyTone, true); setRewriting(false); }}>{rewriting ? (locale === "no" ? "Skriver…" : "Writing…") : (locale === "no" ? "Skriv teksten på nytt" : "Rewrite the text")}</button>
+          </div>
+          <div className="settings-section"><label>{locale === "no" ? "Tekstanimasjon" : "Text motion"}</label>
+            <div className="choice-row">{([["calm", "Rolig", "Calm"], ["kinetic", "Kinetisk (ord for ord)", "Kinetic (word by word)"]] as const).map(([id, no, en]) => <button key={id} type="button" className={`choice ${(settings.typography ?? (settings.style === "Energetic" ? "kinetic" : "calm")) === id ? "selected" : ""}`} onClick={() => updateSetting("typography", id)}>{locale === "no" ? no : en}</button>)}</div>
+            <button type="button" className="button button-light button-small" disabled={fillingVisuals} onClick={() => void fillVisualsFromStock()}>{fillingVisuals ? (locale === "no" ? "Henter bilder…" : "Finding pictures…") : (locale === "no" ? "Fyll manglende bilder fra arkivet" : "Fill missing pictures from the library")}</button>
           </div>
           <div className="settings-section"><label><input type="checkbox" checked={settings.enhanceImages !== false} onChange={(event) => updateSetting("enhanceImages", event.target.checked)} /> {locale === "no" ? "Forbedre bildene (skarphet, lys og farger)" : "Enhance pictures (sharpness, light and colour)"}</label></div>
           <div className="settings-section"><label htmlFor="language">{text.language}</label><select id="language" value={settings.language} onChange={(event) => { const language = event.target.value; updateSetting("language", language); updateSetting("voice", language === "Norsk" ? text.voices.no[0] : text.voices.en[0]); }}>{text.languageOptions.map((language) => <option key={language}>{language}</option>)}</select></div>
