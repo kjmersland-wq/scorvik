@@ -28,6 +28,10 @@ export interface StoryScene {
   visual: string;
   /** true when the text names someone/something that no image can be tied to, so it must not be printed over the picture */
   noOverlay?: boolean;
+  /** stock video clip (same-origin proxied mp4) drawn instead of a still */
+  videoUrl?: string;
+  /** photographer credit shown on the end card when the source requires it (Unsplash) */
+  credit?: string;
   visualSource?: "website-image" | "open-graph" | "not-detected";
   cta?: string;
   musicCue?: string;
@@ -175,6 +179,8 @@ export interface AudioMix {
 export interface VideoSettings {
   mode?: FilmMode;
   showTextOnScreen?: boolean;
+  /** sharpen, level and upscale pictures before filming (default on) */
+  enhanceImages?: boolean;
   format: VideoFormat;
   duration: number;
   language: string;

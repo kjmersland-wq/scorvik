@@ -58,9 +58,14 @@ async function loadSceneImages(project: VideoProject, width: number, height: num
     return cache.get(url);
   };
   const chosen: Array<{ url: string; bitmap: ImageBitmap } | undefined> = [];
+  const clips = new Map<number, { video: HTMLVideoElement; poster: ImageBitmap }>();
   const used = new Set<string>();
-  for (const scene of project.scenes) {
+  for (const [index, scene] of project.scenes.entries()) {
     throwIfAborted(signal);
+    if (scene.videoUrl) {
+      const clip = await loadVideoClip(scene.videoUrl);
+      if (clip) { clips.set(index, clip); chosen.push({ url: scene.videoUrl, bitmap: clip.poster }); used.add(scene.videoUrl); continue; }
+    }
     const own = scene.visual ? await get(scene.visual) : undefined;
     if (own && usable(own) && !used.has(scene.visual)) { chosen.push({ url: scene.visual, bitmap: own }); used.add(scene.visual); } else chosen.push(undefined);
   }
@@ -84,10 +89,13 @@ async function loadSceneImages(project: VideoProject, width: number, height: num
   }
   const visuals = new Map<ImageBitmap, Visual>();
   const result: Visual[] = [];
-  for (const entry of chosen) {
+  const enhance = project.settings.enhanceImages !== false;
+  for (const [index, entry] of chosen.entries()) {
     const bitmap = entry!.bitmap;
+    const clip = clips.get(index);
+    if (clip) { result.push({ ...(await prepareVisual(bitmap, width, height, { enhance: false, trim: false })), video: clip.video }); continue; }
     let visual = visuals.get(bitmap);
-    if (!visual) { visual = await prepareVisual(bitmap, width, height); visuals.set(bitmap, visual); }
+    if (!visual) { visual = await prepareVisual(bitmap, width, height, { enhance, trim: true }); visuals.set(bitmap, visual); }
     result.push(visual);
   }
   return result;
@@ -100,7 +108,7 @@ function motion(scene: StoryScene, index: number, rawProgress: number) {
   return { zoom: 1.07 - 0.07 * progress, pan: 0.5, tilt: 0.3 };
 }
 
-interface Visual { image: ImageBitmap; backdrop?: HTMLCanvasElement }
+interface Visual { image: ImageBitmap; backdrop?: HTMLCanvasElement; video?: HTMLVideoElement; upscale?: number }
 
 type Rgb = [number, number, number];
 
@@ -148,14 +156,106 @@ function trimBorders(bitmap: ImageBitmap): { sx: number; sy: number; sw: number;
   return { sx, sy, sw, sh };
 }
 
-async function prepareVisual(raw: ImageBitmap, width: number, height: number): Promise<Visual> {
-  const crop = trimBorders(raw);
+// Agency-style retouch: gentle upscale toward the frame size, auto-levels, a touch of colour and an unsharp mask.
+async function enhanceImage(image: ImageBitmap, width: number, height: number): Promise<{ bitmap: ImageBitmap; scale: number }> {
+  const cover = Math.max(width / image.width, height / image.height);
+  let scale = Math.min(Math.max(1, cover), 2.5);
+  while (image.width * scale * image.height * scale > 3_500_000 && scale > 1) scale -= 0.1;
+  const w = Math.max(1, Math.round(image.width * scale));
+  const h = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return { bitmap: image, scale: 1 };
+  context.imageSmoothingQuality = "high";
+  // upscale in two gentle steps for a smoother result than one big jump
+  if (scale > 1.6) {
+    const mid = document.createElement("canvas");
+    mid.width = Math.round(image.width * Math.sqrt(scale));
+    mid.height = Math.round(image.height * Math.sqrt(scale));
+    const midContext = mid.getContext("2d");
+    if (midContext) { midContext.imageSmoothingQuality = "high"; midContext.drawImage(image, 0, 0, mid.width, mid.height); context.drawImage(mid, 0, 0, w, h); } else context.drawImage(image, 0, 0, w, h);
+  } else context.drawImage(image, 0, 0, w, h);
+  const frame = context.getImageData(0, 0, w, h);
+  const data = frame.data;
+  const histogram = new Uint32Array(256);
+  for (let i = 0; i < data.length; i += 4) histogram[Math.round(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2])] += 1;
+  const total = w * h;
+  let low = 0, high = 255, running = 0;
+  for (let v = 0; v < 256; v += 1) { running += histogram[v]; if (running >= total * 0.01) { low = v; break; } }
+  running = 0;
+  for (let v = 255; v >= 0; v -= 1) { running += histogram[v]; if (running >= total * 0.01) { high = v; break; } }
+  const gain = Math.min(1.25, 255 / Math.max(60, high - low));
+  const saturation = 1.06;
+  const source = new Uint8ClampedArray(data);
+  for (let i = 0; i < data.length; i += 4) {
+    const r0 = (source[i] - low) * gain, g0 = (source[i + 1] - low) * gain, b0 = (source[i + 2] - low) * gain;
+    const grey = 0.2126 * r0 + 0.7152 * g0 + 0.0722 * b0;
+    data[i] = grey + (r0 - grey) * saturation;
+    data[i + 1] = grey + (g0 - grey) * saturation;
+    data[i + 2] = grey + (b0 - grey) * saturation;
+  }
+  // unsharp mask: original + amount * (original - 3x3 blur)
+  const leveled = new Uint8ClampedArray(data);
+  const amount = scale > 1.3 ? 0.9 : 0.55;
+  for (let y = 1; y < h - 1; y += 1) {
+    for (let x = 1; x < w - 1; x += 1) {
+      const index = (y * w + x) * 4;
+      for (let c = 0; c < 3; c += 1) {
+        const k = index + c;
+        const blur = (leveled[k - w * 4 - 4] + leveled[k - w * 4] + leveled[k - w * 4 + 4] + leveled[k - 4] + leveled[k] + leveled[k + 4] + leveled[k + w * 4 - 4] + leveled[k + w * 4] + leveled[k + w * 4 + 4]) / 9;
+        data[k] = leveled[k] + amount * (leveled[k] - blur);
+      }
+    }
+  }
+  context.putImageData(frame, 0, 0);
+  return { bitmap: await createImageBitmap(canvas), scale };
+}
+
+async function loadVideoClip(url: string): Promise<{ video: HTMLVideoElement; poster: ImageBitmap } | undefined> {
+  try {
+    const response = await fetch(`/api/stock/video?u=${encodeURIComponent(url)}`);
+    if (!response.ok) return undefined;
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.src = URL.createObjectURL(await response.blob());
+    await new Promise<void>((resolve, reject) => { video.onloadeddata = () => resolve(); video.onerror = () => reject(new Error("clip")); });
+    await seekVideo(video, 0.05);
+    return { video, poster: await createImageBitmap(video) };
+  } catch {
+    return undefined;
+  }
+}
+
+function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
+  return new Promise((resolve) => {
+    const target = video.duration ? time % video.duration : 0;
+    if (Math.abs(video.currentTime - target) < 0.001) { resolve(); return; }
+    const done = () => { video.removeEventListener("seeked", done); resolve(); };
+    video.addEventListener("seeked", done);
+    video.currentTime = target;
+    setTimeout(done, 1500);
+  });
+}
+
+async function prepareVisual(raw: ImageBitmap, width: number, height: number, options: { enhance: boolean; trim: boolean } = { enhance: false, trim: true }): Promise<Visual> {
+  const crop = options.trim ? trimBorders(raw) : null;
   let image = raw;
   if (crop) { image = await createImageBitmap(raw, crop.sx, crop.sy, crop.sw, crop.sh); raw.close(); }
   const visible = Math.min(image.width / image.height / (width / height), height / width / (image.height / image.width));
   const coverScale = Math.max(width / image.width, height / image.height);
   // Needs heavy upscaling (soft, pixelated result) or heavy cropping: show it whole over a blurred backdrop instead.
-  if (visible >= 0.62 && coverScale <= 1.7) return { image };
+  const finish = async (backdrop?: HTMLCanvasElement): Promise<Visual> => {
+    if (!options.enhance) return { image, backdrop };
+    const enhanced = await enhanceImage(image, width, height).catch(() => undefined);
+    if (!enhanced || enhanced.bitmap === image) return { image, backdrop };
+    image.close();
+    return { image: enhanced.bitmap, backdrop, upscale: enhanced.scale };
+  };
+  if (visible >= 0.62 && coverScale <= 1.7) return finish();
   // Picture would lose too much when cropped: show it whole over a soft, darkened blow-up of itself, as an agency would.
   const tiny = document.createElement("canvas");
   tiny.width = 40;
@@ -165,7 +265,7 @@ async function prepareVisual(raw: ImageBitmap, width: number, height: number): P
   backdrop.width = width;
   backdrop.height = height;
   const context = backdrop.getContext("2d");
-  if (!tinyContext || !context) return { image };
+  if (!tinyContext || !context) return finish();
   const cover = Math.max(tiny.width / image.width, tiny.height / image.height);
   tinyContext.drawImage(image, (tiny.width - image.width * cover) / 2, (tiny.height - image.height * cover) / 2, image.width * cover, image.height * cover);
   context.imageSmoothingEnabled = true;
@@ -173,25 +273,28 @@ async function prepareVisual(raw: ImageBitmap, width: number, height: number): P
   context.drawImage(tiny, 0, 0, width, height);
   context.fillStyle = "rgba(0,0,0,0.45)";
   context.fillRect(0, 0, width, height);
-  return { image, backdrop };
+  return finish(backdrop);
 }
 
 function drawScene(ctx: CanvasRenderingContext2D, visual: Visual, scene: StoryScene, index: number, progress: number, width: number, height: number) {
   const { zoom, pan, tilt } = motion(scene, index, progress);
-  const { image, backdrop } = visual;
+  const { image, backdrop, video } = visual;
+  const source: CanvasImageSource = video ?? image;
+  const iw = video ? video.videoWidth : image.width;
+  const ih = video ? video.videoHeight : image.height;
   if (backdrop) {
     ctx.drawImage(backdrop, 0, 0);
-    const fit = Math.min(width / image.width, (height * 0.7) / image.height, 1.5) * (1 + (zoom - 1) * 0.5);
-    const w = image.width * fit;
-    const h = image.height * fit;
-    ctx.drawImage(image, (width - w) / 2, (height - h) / 2 - height * 0.07, w, h); // lifted so titles sit below the picture
+    const fit = Math.min(width / iw, (height * 0.7) / ih, 1.5 / (visual.upscale ?? 1)) * (1 + (zoom - 1) * 0.5);
+    const w = iw * fit;
+    const h = ih * fit;
+    ctx.drawImage(source, (width - w) / 2, (height - h) / 2 - height * 0.07, w, h); // lifted so titles sit below the picture
     return;
   }
-  const cover = Math.max(width / image.width, height / image.height) * zoom;
-  const drawWidth = image.width * cover;
-  const drawHeight = image.height * cover;
+  const cover = Math.max(width / iw, height / ih) * zoom;
+  const drawWidth = iw * cover;
+  const drawHeight = ih * cover;
   // Bias the crop upward so heads and key subjects stay in frame.
-  ctx.drawImage(image, -(drawWidth - width) * pan, -(drawHeight - height) * tilt, drawWidth, drawHeight);
+  ctx.drawImage(source, -(drawWidth - width) * pan, -(drawHeight - height) * tilt, drawWidth, drawHeight);
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
@@ -335,7 +438,7 @@ function drawIntro(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | unde
 }
 
 // Closing brand card: the film dims and settles on the brand name, a hairline rule and the web address.
-function drawEndCard(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | undefined, brand: string, address: string, width: number, height: number, amount: number) {
+function drawEndCard(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | undefined, brand: string, address: string, credits: string, width: number, height: number, amount: number) {
   if (amount <= 0) return;
   const short = Math.min(width, height);
   ctx.globalAlpha = amount * 0.68;
@@ -359,6 +462,12 @@ function drawEndCard(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | un
   ctx.font = `400 ${Math.round(short * 0.028)}px ${textFamily}`;
   ctx.fillStyle = "rgba(255,255,255,0.8)";
   ctx.fillText(address.toUpperCase(), width / 2 + short * 0.005, height / 2 + short * 0.1 + lift);
+  if (credits) {
+    tracking(ctx, "0.04em");
+    ctx.font = `400 ${Math.max(11, Math.round(short * 0.017))}px ${textFamily}`;
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.fillText(credits, width / 2, height - short * 0.045);
+  }
   tracking(ctx, "0px");
   ctx.globalAlpha = 1;
 }
@@ -516,6 +625,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const logo = await prepareLogo(project, width, height).catch(() => undefined);
   const finish = createFinish(ctx, width, height, project.settings.style === "Cinematic");
   const brand = project.analysis.brand || project.title;
+  const credits = (() => { const names = [...new Set(project.scenes.map((scene) => scene.credit).filter((value): value is string => Boolean(value)))]; return names.length ? `Photos: ${names.join(", ")} / Unsplash` : ""; })();
   const address = (() => { try { return new URL(project.analysis.url).hostname.replace(/^www\./, ""); } catch { return project.analysis.url; } })();
   const starts: number[] = [];
   scenes.reduce((sum, scene) => { starts.push(sum); return sum + scene.duration; }, 0);
@@ -531,11 +641,15 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const scene = scenes[current];
       const local = time - starts[current];
       ctx.globalAlpha = 1;
+      const currentClip = images[current].video;
+      if (currentClip) await seekVideo(currentClip, local);
       drawScene(ctx, images[current], scene, current, local / scene.duration, width, height);
       const untilEnd = scene.duration - local;
       if (current < scenes.length - 1 && untilEnd < crossfade) {
         const next = current + 1;
         ctx.globalAlpha = ease(1 - untilEnd / crossfade);
+        const nextClip = images[next].video;
+        if (nextClip) await seekVideo(nextClip, 0);
         drawScene(ctx, images[next], scenes[next], next, 0, width, height);
         ctx.globalAlpha = 1;
       }
@@ -547,7 +661,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const introAmount = current === 0 ? ease(local / 0.5) * (1 - ease((local - (introLength - 0.7)) / 0.7)) : 0;
       if (showText) drawText(ctx, scene, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount));
       drawIntro(ctx, logo, brand, width, height, introAmount);
-      drawEndCard(ctx, logo, brand, address, width, height, endAmount);
+      drawEndCard(ctx, logo, brand, address, credits, width, height, endAmount);
       const fade = Math.max(Math.min(1, 1 - time / 0.4), Math.min(1, 1 - (totalDuration - time) / 0.6), 0);
       if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, fade)})`; ctx.fillRect(0, 0, width, height); }
 
@@ -568,7 +682,10 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   } finally {
     if (videoEncoder.state !== "closed") videoEncoder.close();
     if (audioEncoder && audioEncoder.state !== "closed") audioEncoder.close();
-    images.forEach((visual) => visual.image.close());
+    images.forEach((visual) => {
+      visual.image.close();
+      if (visual.video) { URL.revokeObjectURL(visual.video.src); visual.video.removeAttribute("src"); }
+    });
   }
 
   onProgress(100);

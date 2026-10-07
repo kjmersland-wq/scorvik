@@ -10,6 +10,8 @@ import { saveProject } from "@/lib/projects";
 import { browserRenderSupported, renderProjectInBrowser } from "@/lib/render/browser-render";
 import { saveVideo } from "@/lib/video-store";
 import { VersionsPanel } from "@/components/versions-panel";
+import { StockPicker } from "@/components/stock-picker";
+import type { StockItem } from "@/lib/stock/search";
 import type { CreativeBrief, FilmMode, ScenePurpose, SiteAnalysis, StoryScene, VideoFormat, VideoProject, VideoSettings } from "@/types/project";
 import { MusicStudio } from "@/components/music-studio";
 import { platformPresets } from "@/lib/platforms/presets";
@@ -73,6 +75,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   const [scenes, setScenes] = useState<StoryScene[]>(demoScenes);
     const [settings, setSettings] = useState<VideoSettings>({ ...defaultSettings, ...initialSettings, language: locale === "no" ? "Norsk" : "English", voice: locale === "no" ? text.voices.no[0] : defaultSettings.voice, mode: initialSettings.mode ?? "advert", showTextOnScreen: initialSettings.showTextOnScreen ?? true });
   const [editingScene, setEditingScene] = useState<string | null>(null);
+  const [stockScene, setStockScene] = useState<string | null>(null);
   const [project, setProject] = useState<VideoProject | null>(null);
   const [renderPercent, setRenderPercent] = useState(0);
   const [renderError, setRenderError] = useState("");
@@ -201,6 +204,19 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     setScenes((current) => current.map((scene) => scene.id === id ? { ...scene, ...patch } : scene));
   }
 
+  function suggestQuery(scene: StoryScene) {
+    const words = scene.headline.split(/\s+/).map((word) => word.replace(/[^\p{L}]/gu, "")).filter((word) => word.length >= 4).slice(0, 3);
+    return words.join(" ") || analysis?.brand || "";
+  }
+
+  function pickStock(id: string, item: StockItem) {
+    changeScene(id, item.kind === "video"
+      ? { visual: item.previewUrl || item.url, videoUrl: item.url, credit: undefined }
+      : { visual: item.url, videoUrl: undefined, credit: item.source === "unsplash" ? item.credit : undefined });
+    if (item.downloadLocation) void fetch("/api/stock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ downloadLocation: item.downloadLocation }) }).catch(() => {});
+    setStockScene(null);
+  }
+
   function changeVisual(id: string) {
     setScenes((current) => current.map((scene) => {
       if (scene.id !== id) return scene;
@@ -314,7 +330,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="scene-list">{scenes.map((scene, index) => <article className="scene-row" key={scene.id}>
             <div className="scene-art" style={{ backgroundImage: `linear-gradient(0deg,#15231a44,transparent),url("${scene.visual}")` }} aria-label={locale === "no" ? `Bilde for scene ${index + 1}` : `Visual for scene ${index + 1}`} />
             <div className="scene-copy"><div className="scene-topline"><b>{String(index + 1).padStart(2, "0")}</b><select aria-label={locale === "no" ? `Hva scene ${index + 1} viser` : `What scene ${index + 1} shows`} value={scene.purpose} onChange={(event) => changeScene(scene.id, { purpose: event.target.value as ScenePurpose })}>{purposes.map((purpose) => <option key={purpose} value={purpose}>{purposeLabels[purpose]}</option>)}</select></div>
-              {editingScene === scene.id ? <><input className="field-control" aria-label={text.wordsOnScreen} value={scene.headline} onChange={(event) => changeScene(scene.id, { headline: event.target.value })}/><input className="field-control" aria-label={text.moreDetail} value={scene.supportingText} onChange={(event) => changeScene(scene.id, { supportingText: event.target.value })}/><textarea className="text-control" aria-label={text.wordsToSay} value={scene.voiceover} onChange={(event) => changeScene(scene.id, { voiceover: event.target.value })}/><div className="scene-edit-options"><label>{text.connectScenes}<select aria-label={text.connectScenes} value={scene.transition} onChange={(event) => changeScene(scene.id, { transition: event.target.value })}>{transitions.map((transition) => <option key={transition}>{transition}</option>)}</select></label><button className="button button-light button-small" onClick={() => changeVisual(scene.id)}>{text.tryImage} ↻</button></div><button className="text-link scene-done" onClick={() => setEditingScene(null)}>{text.saveChanges}</button></> : <><h4>{scene.headline}</h4>{showTextOnScreen && <p>{scene.supportingText}</p>}<p>{scene.voiceover}</p><button className="text-link scene-edit" onClick={() => setEditingScene(scene.id)}>{text.changeScene}</button></>}
+              {editingScene === scene.id ? <><input className="field-control" aria-label={text.wordsOnScreen} value={scene.headline} onChange={(event) => changeScene(scene.id, { headline: event.target.value })}/><input className="field-control" aria-label={text.moreDetail} value={scene.supportingText} onChange={(event) => changeScene(scene.id, { supportingText: event.target.value })}/><textarea className="text-control" aria-label={text.wordsToSay} value={scene.voiceover} onChange={(event) => changeScene(scene.id, { voiceover: event.target.value })}/><div className="scene-edit-options"><label>{text.connectScenes}<select aria-label={text.connectScenes} value={scene.transition} onChange={(event) => changeScene(scene.id, { transition: event.target.value })}>{transitions.map((transition) => <option key={transition}>{transition}</option>)}</select></label><button className="button button-light button-small" onClick={() => changeVisual(scene.id)}>{text.tryImage} ↻</button><button className="button button-light button-small" type="button" onClick={() => setStockScene(stockScene === scene.id ? null : scene.id)}>{locale === "no" ? "Arkiv: bilder og video" : "Library: pictures and video"}</button></div>{stockScene === scene.id && <StockPicker locale={locale} initialQuery={suggestQuery(scene)} onPick={(item) => pickStock(scene.id, item)} onClose={() => setStockScene(null)} />}<button className="text-link scene-done" onClick={() => setEditingScene(null)}>{text.saveChanges}</button></> : <><h4>{scene.headline}</h4>{showTextOnScreen && <p>{scene.supportingText}</p>}<p>{scene.voiceover}</p><button className="text-link scene-edit" onClick={() => setEditingScene(scene.id)}>{text.changeScene}</button></>}
             </div>
             <div className="scene-controls"><div><button title={locale === "no" ? "Flytt scenen opp" : "Move scene up"} aria-label={locale === "no" ? "Flytt scenen opp" : "Move scene up"} onClick={() => moveScene(index, -1)}>↑</button><button title={locale === "no" ? "Flytt scenen ned" : "Move scene down"} aria-label={locale === "no" ? "Flytt scenen ned" : "Move scene down"} onClick={() => moveScene(index, 1)}>↓</button></div><select aria-label={locale === "no" ? `Lengde på scene ${index + 1}` : `Duration of scene ${index + 1}`} value={scene.duration} onChange={(event) => changeScene(scene.id, { duration: Number(event.target.value) })}>{[3,4,5,6,7,8,10,12,15,20,25,30].map((duration) => <option key={duration} value={duration}>{duration} {text.seconds}</option>)}</select><div><button title={locale === "no" ? "Kopier scenen" : "Duplicate scene"} aria-label={locale === "no" ? "Kopier scenen" : "Duplicate scene"} onClick={() => { const duplicate = { ...scene, id: crypto.randomUUID() }; setScenes((current) => [...current.slice(0, index + 1), duplicate, ...current.slice(index + 1)]); }}>⧉</button><button title={locale === "no" ? "Fjern scenen" : "Remove scene"} aria-label={locale === "no" ? "Fjern scenen" : "Remove scene"} onClick={() => setScenes((current) => current.filter((item) => item.id !== scene.id))}>×</button></div></div>
           </article>)}</div>
@@ -326,6 +342,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="settings-section"><label>{text.chooseFrame}</label><div className="choice-row">{formats.map((format) => <button key={format} className={`choice ${settings.format === format ? "selected" : ""}`} onClick={() => updateSetting("format", format)}>{format}</button>)}</div></div>
           <div className="settings-section"><label>{text.durationQuestion}</label><div className="choice-row">{durationOptions.map((duration) => <button key={duration} className={`choice ${settings.duration === duration ? "selected" : ""}`} onClick={() => selectDuration(duration)}>{duration} {text.seconds}</button>)}</div></div>
           <div className="settings-section"><label><input type="checkbox" checked={showTextOnScreen} onChange={(event) => { setShowTextOnScreen(event.target.checked); updateSetting("showTextOnScreen", event.target.checked); }} /> {text.textToggle}</label></div>
+          <div className="settings-section"><label><input type="checkbox" checked={settings.enhanceImages !== false} onChange={(event) => updateSetting("enhanceImages", event.target.checked)} /> {locale === "no" ? "Forbedre bildene (skarphet, lys og farger)" : "Enhance pictures (sharpness, light and colour)"}</label></div>
           <div className="settings-section"><label htmlFor="language">{text.language}</label><select id="language" value={settings.language} onChange={(event) => { const language = event.target.value; updateSetting("language", language); updateSetting("voice", language === "Norsk" ? text.voices.no[0] : text.voices.en[0]); }}>{text.languageOptions.map((language) => <option key={language}>{language}</option>)}</select></div>
           <div className="settings-section"><label htmlFor="voice">{text.voice}</label><select id="voice" value={settings.voice} onChange={(event) => updateSetting("voice", event.target.value)}>{(settings.language === "Norsk" ? text.voices.no : text.voices.en).map((voice) => <option key={voice}>{voice}</option>)}</select></div>
           <div className="settings-section"><label>{text.style}</label><div className="choice-row">{styles.map((style, index) => <button key={style} className={`choice ${settings.style === style ? "selected" : ""}`} onClick={() => updateSetting("style", style)}>{styleLabels[index]}</button>)}</div></div>

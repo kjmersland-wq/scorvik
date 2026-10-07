@@ -654,3 +654,13 @@ body::before {
 .version-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
 .version-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #302b2a; border-radius: 2px; color: #cfc5bc; font-size: 12px; }
 .version-list b { color: #eee7df; font-weight: 600; }
+
+.stock-picker { margin-top: 12px; padding: 12px; border: 1px solid #3b3230; border-radius: 2px; background: #0b0a0b; display: grid; gap: 10px; }
+.stock-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stock-bar .field-control { flex: 1 1 100%; min-width: 0; }
+.stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; max-height: 340px; overflow: auto; }
+.stock-item { display: grid; gap: 4px; padding: 0; border: 1px solid #302b2a; background: #141112; cursor: pointer; text-align: left; color: #a99f97; }
+.stock-item:hover { border-color: #f06445; }
+.stock-item img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; display: block; }
+.stock-item small { padding: 0 6px 6px; font-size: 10px; line-height: 1.3; }
+.stock-noprev { display: grid; place-items: center; aspect-ratio: 16 / 10; background: #1d1412; }
