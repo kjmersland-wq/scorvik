@@ -46,12 +46,13 @@ async function loadBitmap(source: string, baseUrl: string): Promise<ImageBitmap 
   }
 }
 
-async function loadSceneImages(project: VideoProject, signal?: AbortSignal): Promise<ImageBitmap[]> {
+async function loadSceneImages(project: VideoProject, width: number, height: number, signal?: AbortSignal): Promise<Visual[]> {
   const logos = new Set(project.analysis.logoCandidates ?? []);
   const fallbacks = [project.thumbnailUrl, project.analysis.openGraphImage, ...(project.analysis.images ?? []).filter((image) => !logos.has(image)), project.analysis.image]
     .filter((value): value is string => Boolean(value));
   const cache = new Map<string, ImageBitmap | undefined>();
-  const bitmaps: ImageBitmap[] = [];
+  const visuals = new Map<ImageBitmap, Visual>();
+  const bitmaps: Visual[] = [];
   for (const [index, scene] of project.scenes.entries()) {
     throwIfAborted(signal);
     let found: ImageBitmap | undefined;
@@ -61,7 +62,9 @@ async function loadSceneImages(project: VideoProject, signal?: AbortSignal): Pro
       if (found) break;
     }
     if (!found) throw new Error(`Scene ${index + 1} has no image that could be loaded.`);
-    bitmaps.push(found);
+    let visual = visuals.get(found);
+    if (!visual) { visual = await prepareVisual(found, width, height); visuals.set(found, visual); }
+    bitmaps.push(visual);
   }
   return bitmaps;
 }
@@ -72,12 +75,96 @@ function motion(scene: StoryScene, index: number, progress: number) {
   return { zoom: 1.08 - 0.08 * progress, pan: 0.5 };
 }
 
-function drawScene(ctx: CanvasRenderingContext2D, image: ImageBitmap, scene: StoryScene, index: number, progress: number, width: number, height: number) {
+interface Visual { image: ImageBitmap; backdrop?: HTMLCanvasElement }
+
+type Rgb = [number, number, number];
+
+// Crops flat-colour bars (letterboxing/pillarboxing baked into website images) so only the real picture is framed.
+function trimBorders(bitmap: ImageBitmap): { sx: number; sy: number; sw: number; sh: number } | null {
+  const scale = Math.min(1, 160 / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(8, Math.round(bitmap.width * scale));
+  const h = Math.max(8, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return null;
+  context.drawImage(bitmap, 0, 0, w, h);
+  const data = context.getImageData(0, 0, w, h).data;
+  const pixel = (x: number, y: number): Rgb => { const i = (y * w + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+  const near = (a: Rgb, b: Rgb) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 36;
+  const line = (index: number, vertical: boolean): Rgb | null => {
+    const count = vertical ? h : w;
+    const first = vertical ? pixel(index, 0) : pixel(0, index);
+    for (let k = 1; k < count; k += 1) if (!near(vertical ? pixel(index, k) : pixel(k, index), first)) return null;
+    return first;
+  };
+  const walk = (from: number, step: number, limit: number, vertical: boolean) => {
+    const ref = line(from, vertical);
+    if (!ref) return 0;
+    let count = 0;
+    for (let index = from; index !== limit; index += step) {
+      const current = line(index, vertical);
+      if (!current || !near(current, ref)) break;
+      count += 1;
+    }
+    return count;
+  };
+  const left = walk(0, 1, Math.floor(w * 0.4), true);
+  const right = walk(w - 1, -1, Math.ceil(w * 0.6), true);
+  const top = walk(0, 1, Math.floor(h * 0.4), false);
+  const bottom = walk(h - 1, -1, Math.ceil(h * 0.6), false);
+  if (left + right + top + bottom < 2) return null;
+  const sx = Math.round(((left > 0 ? left + 1 : 0) / w) * bitmap.width);
+  const sy = Math.round(((top > 0 ? top + 1 : 0) / h) * bitmap.height);
+  const sw = Math.round(((w - (left > 0 ? left + 1 : 0) - (right > 0 ? right + 1 : 0)) / w) * bitmap.width);
+  const sh = Math.round(((h - (top > 0 ? top + 1 : 0) - (bottom > 0 ? bottom + 1 : 0)) / h) * bitmap.height);
+  if (sw < bitmap.width * 0.3 || sh < bitmap.height * 0.3) return null;
+  return { sx, sy, sw, sh };
+}
+
+async function prepareVisual(raw: ImageBitmap, width: number, height: number): Promise<Visual> {
+  const crop = trimBorders(raw);
+  let image = raw;
+  if (crop) { image = await createImageBitmap(raw, crop.sx, crop.sy, crop.sw, crop.sh); raw.close(); }
+  const visible = Math.min(image.width / image.height / (width / height), height / width / (image.height / image.width));
+  if (visible >= 0.62) return { image };
+  // Picture would lose too much when cropped: show it whole over a soft, darkened blow-up of itself, as an agency would.
+  const tiny = document.createElement("canvas");
+  tiny.width = 40;
+  tiny.height = Math.max(2, Math.round((40 * height) / width));
+  const tinyContext = tiny.getContext("2d");
+  const backdrop = document.createElement("canvas");
+  backdrop.width = width;
+  backdrop.height = height;
+  const context = backdrop.getContext("2d");
+  if (!tinyContext || !context) return { image };
+  const cover = Math.max(tiny.width / image.width, tiny.height / image.height);
+  tinyContext.drawImage(image, (tiny.width - image.width * cover) / 2, (tiny.height - image.height * cover) / 2, image.width * cover, image.height * cover);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(tiny, 0, 0, width, height);
+  context.fillStyle = "rgba(0,0,0,0.45)";
+  context.fillRect(0, 0, width, height);
+  return { image, backdrop };
+}
+
+function drawScene(ctx: CanvasRenderingContext2D, visual: Visual, scene: StoryScene, index: number, progress: number, width: number, height: number) {
   const { zoom, pan } = motion(scene, index, progress);
+  const { image, backdrop } = visual;
+  if (backdrop) {
+    ctx.drawImage(backdrop, 0, 0);
+    const fit = Math.min(width / image.width, (height * 0.92) / image.height) * (1 + (zoom - 1) * 0.5);
+    const w = image.width * fit;
+    const h = image.height * fit;
+    ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+    return;
+  }
   const cover = Math.max(width / image.width, height / image.height) * zoom;
   const drawWidth = image.width * cover;
   const drawHeight = image.height * cover;
-  ctx.drawImage(image, -(drawWidth - width) * pan, -(drawHeight - height) / 2, drawWidth, drawHeight);
+  // Bias the crop upward so heads and key subjects stay in frame.
+  ctx.drawImage(image, -(drawWidth - width) * pan, -(drawHeight - height) * 0.3, drawWidth, drawHeight);
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
@@ -88,29 +175,52 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
     if (line && ctx.measureText(next).width > maxWidth) { lines.push(line); line = word; } else line = next;
   }
   if (line) lines.push(line);
-  return lines.slice(0, 4);
+  return lines.slice(0, 3);
 }
 
-function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: number, height: number, alpha: number) {
-  const parts = [...new Set([scene.headline, scene.supportingText].filter(Boolean))];
-  if (!parts.length) return;
-  const size = Math.max(24, Math.round(height * 0.045));
-  const pad = Math.round(width * 0.02);
-  const maxWidth = width * 0.84;
-  ctx.font = `600 ${size}px system-ui, "Segoe UI", Arial, sans-serif`;
-  const lines = parts.flatMap((part) => wrap(ctx, part, maxWidth - pad * 2)).slice(0, 5);
-  const lineHeight = size * 1.3;
-  const boxHeight = lines.length * lineHeight + pad * 2;
-  const boxWidth = Math.min(maxWidth, Math.max(...lines.map((line) => ctx.measureText(line).width)) + pad * 2);
-  const x = (width - boxWidth) / 2;
-  const y = height - boxHeight - height * 0.08;
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = "rgba(0,0,0,0.46)";
-  ctx.fillRect(x, y, boxWidth, boxHeight);
+// Lower-third: soft gradient, bold headline over a lighter supporting line, easing in and out with the scene.
+function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: number, height: number, local: number, duration: number) {
+  const headline = scene.headline.trim();
+  const support = scene.supportingText.trim() && scene.supportingText.trim() !== headline ? scene.supportingText.trim() : "";
+  if (!headline && !support) return;
+  const ease = (value: number) => { const v = Math.max(0, Math.min(1, value)); return v * v * (3 - 2 * v); };
+  const appear = ease((local - 0.15) / 0.55) * ease((duration - local) / 0.3);
+  if (appear <= 0) return;
+  const margin = Math.round(Math.min(width, height) * 0.075);
+  const maxWidth = width - margin * 2 - (width > height ? width * 0.15 : 0);
+  const headSize = Math.round(Math.min(width, height) * (width >= height ? 0.062 : 0.062));
+  const supportSize = Math.round(headSize * 0.52);
+  const family = '"Helvetica Neue", "Segoe UI", system-ui, Arial, sans-serif';
+  ctx.font = `700 ${headSize}px ${family}`;
+  const headLines = headline ? wrap(ctx, headline, maxWidth) : [];
+  ctx.font = `400 ${supportSize}px ${family}`;
+  const supportLines = support ? wrap(ctx, support, maxWidth).slice(0, 2) : [];
+  const blockHeight = headLines.length * headSize * 1.12 + (supportLines.length ? supportSize * 0.7 + supportLines.length * supportSize * 1.3 : 0);
+  const baseline = height - margin * 1.15;
+  const top = baseline - blockHeight;
+  const rise = (1 - appear) * headSize * 0.35;
+
+  const gradient = ctx.createLinearGradient(0, top - headSize * 2.2, 0, height);
+  gradient.addColorStop(0, "rgba(0,0,0,0)");
+  gradient.addColorStop(1, "rgba(0,0,0,0.72)");
+  ctx.globalAlpha = appear;
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, top - headSize * 2.2, width, height - (top - headSize * 2.2));
   ctx.fillStyle = "#fff";
-  ctx.textBaseline = "top";
-  ctx.textAlign = "center";
-  lines.forEach((line, i) => ctx.fillText(line, width / 2, y + pad + i * lineHeight));
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowBlur = headSize * 0.25;
+  let y = top + rise;
+  ctx.font = `700 ${headSize}px ${family}`;
+  for (const line of headLines) { y += headSize * 1.12; ctx.fillText(line, margin, y - headSize * 0.18); }
+  if (supportLines.length) {
+    ctx.font = `400 ${supportSize}px ${family}`;
+    ctx.fillStyle = "rgba(255,255,255,0.88)";
+    y += supportSize * 0.7;
+    for (const line of supportLines) { y += supportSize * 1.3; ctx.fillText(line, margin, y - supportSize * 0.3); }
+  }
+  ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
 }
 
@@ -168,7 +278,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const totalDuration = project.settings.duration;
   const showText = project.settings.showTextOnScreen !== false;
 
-  const images = await loadSceneImages(project, signal);
+  const images = await loadSceneImages(project, width, height, signal);
   onProgress(3);
 
   let music: AudioBuffer | undefined;
@@ -217,13 +327,13 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const local = time - starts[current];
       ctx.globalAlpha = 1;
       drawScene(ctx, images[current], scene, current, local / scene.duration, width, height);
-      if (showText) drawText(ctx, scene, width, height, 1);
+      if (showText) drawText(ctx, scene, width, height, local, scene.duration);
       const untilEnd = scene.duration - local;
       if (current < scenes.length - 1 && untilEnd < crossfade) {
         const next = current + 1;
         ctx.globalAlpha = 1 - untilEnd / crossfade;
         drawScene(ctx, images[next], scenes[next], next, 0, width, height);
-        if (showText) drawText(ctx, scenes[next], width, height, 1);
+        if (showText) drawText(ctx, scenes[next], width, height, 0.0, scenes[next].duration);
         ctx.globalAlpha = 1;
       }
       const fade = Math.max(Math.min(1, 1 - time / 0.25), Math.min(1, 1 - (totalDuration - time) / 0.35), 0);
@@ -246,7 +356,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   } finally {
     if (videoEncoder.state !== "closed") videoEncoder.close();
     if (audioEncoder && audioEncoder.state !== "closed") audioEncoder.close();
-    images.forEach((image) => image.close());
+    images.forEach((visual) => visual.image.close());
   }
 
   onProgress(100);
