@@ -128,6 +128,5 @@ export function MusicStudio({ analysis, brief, duration, selectedTrackId, onSele
       <span className="track-duration">{Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, "0")}</span><button className={`track-favorite ${favorites.includes(track.id) ? "saved" : ""}`} aria-label={favorites.includes(track.id) ? `${text.saved} ${track.title}` : `${text.saved} ${track.title}`} onClick={() => toggleFavorite(track)}>{favorites.includes(track.id) ? "♥" : "♡"}</button>
       <small className="track-license">{text.royaltyFree}</small>
     </article>) : <p className="music-empty">{recommendations.length === 0 ? text.noLicensedMusic : tab === "Favorites" ? text.nothingSaved : text.nothingFits}</p>}</div>}
-    <p className="music-disclosure">{text.license}</p>
   </div>;
 }

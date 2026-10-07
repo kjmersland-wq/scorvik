@@ -116,8 +116,7 @@ export const copy = {
       browse: "Browse music by feeling or sound", findGenre: "Find a genre", allGenres: "A little of everything", search: "Search sounds, genres, or moods", findSound: "Find a sound",
       nothingSaved: "Nothing saved just yet. Save a track and it will be waiting here.", nothingFits: "Nothing quite fits yet. Try another feeling or browse genres.",
       moods: { Warm: "Warm", Bold: "Bold", Calm: "Calm", Energetic: "Energetic", Cinematic: "Cinematic", Playful: "Playful", Elegant: "Elegant", Emotional: "Emotional", Modern: "Modern", Nostalgic: "Nostalgic", Adventurous: "Adventurous", Authentic: "Authentic" },
-      noLicensedMusic: "No cleared commercial tracks are available yet.", ad: "Ad", guide: "Guide", swapVersion: "Switch version", royaltyFree: "Scorvik Original · Suno terms unverified",
-      license: "Scorvik Original tracks are available from the local library. Confirm the applicable Suno plan terms before commercial publication.",
+      noLicensedMusic: "No cleared commercial tracks are available yet.", ad: "Ad", guide: "Guide", swapVersion: "Switch version", royaltyFree: "Scorvik Original",
     },
   },
   no: {
@@ -235,8 +234,7 @@ export const copy = {
       browse: "Finn musikk etter stemning eller uttrykk", findGenre: "Velg sjanger", allGenres: "Alle sjangre", search: "Søk etter lyd, sjanger eller stemning", findSound: "Finn lyd",
       nothingSaved: "Du har ikke lagret noe ennå.", nothingFits: "Fant ingen passende spor. Prøv en annen stemning eller sjanger.",
       moods: { Warm: "Varm", Bold: "Tydelig", Calm: "Rolig", Energetic: "Energisk", Cinematic: "Filmatisk", Playful: "Leken", Elegant: "Elegant", Emotional: "Følsom", Modern: "Moderne", Nostalgic: "Nostalgisk", Adventurous: "Eventyrlig", Authentic: "Ekte" },
-      noLicensedMusic: "Ingen spor med avklart kommersiell lisens er tilgjengelige ennå.", ad: "Reklame", guide: "Instruksjon", swapVersion: "Bytt versjon", royaltyFree: "Scorvik Original · Suno-vilkår ikke bekreftet",
-      license: "Scorvik Original-spor er tilgjengelige fra det lokale biblioteket. Bekreft vilkårene for aktuell Suno-plan før kommersiell publisering.",
+      noLicensedMusic: "Ingen spor med avklart kommersiell lisens er tilgjengelige ennå.", ad: "Reklame", guide: "Instruksjon", swapVersion: "Bytt versjon", royaltyFree: "Scorvik Original",
     },
   },
 } as const;
