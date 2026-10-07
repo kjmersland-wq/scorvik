@@ -38,8 +38,9 @@ export async function POST(request: Request) {
       const result = await polishScenes(body.brand.slice(0, 120), body.source.slice(0, 6000), scenes);
       return result ? NextResponse.json({ scenes: result }) : NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
     }
-  } catch {
-    return NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message.slice(0, 240) : "";
+    return NextResponse.json({ error: { code: "FAILED", detail } }, { status: 502 });
   }
   return NextResponse.json({ error: { code: "INVALID" } }, { status: 400 });
 }

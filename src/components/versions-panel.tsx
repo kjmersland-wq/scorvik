@@ -52,7 +52,10 @@ export function VersionsPanel({ project, locale = "en" }: { project: VideoProjec
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ task: "translate", language, scenes: project.scenes.map((scene) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText })) }),
     });
-    if (!response.ok) throw new Error(nb ? "Oversettelse er ikke tilgjengelig akkurat nå." : "Translation is not available right now.");
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: { detail?: string } };
+      throw new Error(`${nb ? "Oversettelse feilet" : "Translation failed"}${body.error?.detail ? ` (${body.error.detail})` : ""}`);
+    }
     const data = await response.json() as { scenes: Array<{ id: string; headline: string; supportingText: string }> };
     return project.scenes.map((scene) => {
       const next = data.scenes.find((item) => item.id === scene.id);

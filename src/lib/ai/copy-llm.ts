@@ -19,7 +19,7 @@ export const copyLanguages: Record<string, string> = {
   es: "Spanish",
 };
 
-const model = "claude-haiku-4-5-20251001";
+const defaultModel = "claude-haiku-4-5-20251001";
 const headlineLimit = 70;
 const supportLimit = 120;
 
@@ -72,10 +72,13 @@ async function askClaude(system: string, user: string): Promise<string | undefin
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model, max_tokens: 2000, temperature: 0.4, system, messages: [{ role: "user", content: user }] }),
+    body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || defaultModel, max_tokens: 2000, system, messages: [{ role: "user", content: user }] }),
     signal: AbortSignal.timeout(25_000),
   });
-  if (!response.ok) throw new Error(`Claude request failed (${response.status})`);
+  if (!response.ok) {
+    const detail = await response.json().then((body: { error?: { message?: string } }) => body.error?.message ?? "").catch(() => "");
+    throw new Error(`Claude ${response.status}: ${detail}`.slice(0, 240));
+  }
   const data = await response.json() as { content?: Array<{ type: string; text?: string }> };
   return data.content?.find((part) => part.type === "text")?.text;
 }
@@ -103,7 +106,9 @@ Rules:
 
 export async function polishScenes(brand: string, source: string, scenes: CopyScene[]): Promise<CopyScene[] | undefined> {
   const answer = await askClaude(polishSystem, `BRAND: ${brand}\nSOURCE:\n${source.slice(0, 4000)}\n\nSCENES:\n${JSON.stringify(scenes)}`);
-  return validateScenes(parseJsonArray(answer), scenes, `${brand} ${source}`, false);
+  const parsed = validateScenes(parseJsonArray(answer), scenes, `${brand} ${source}`, false);
+  if (!parsed) throw new Error("Claude answered in an unexpected format.");
+  return parsed;
 }
 
 export async function translateScenes(language: string, scenes: CopyScene[]): Promise<CopyScene[] | undefined> {
@@ -111,5 +116,7 @@ export async function translateScenes(language: string, scenes: CopyScene[]): Pr
   if (!target) return undefined;
   const system = `You translate on-screen film text into ${target}. Keep the meaning, tone and length; keep brand names and numbers exactly as written. Do not add or remove claims. Return ONLY a JSON array of {"id","headline","supportingText"} with the same ids and order. Headlines at most ${headlineLimit} characters.`;
   const answer = await askClaude(system, JSON.stringify(scenes.map(({ id, headline, supportingText }) => ({ id, headline, supportingText }))));
-  return validateScenes(parseJsonArray(answer), scenes, "", true);
+  const parsed = validateScenes(parseJsonArray(answer), scenes, "", true);
+  if (!parsed) throw new Error("Claude answered in an unexpected format.");
+  return parsed;
 }
