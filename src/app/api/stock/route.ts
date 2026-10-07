@@ -19,7 +19,8 @@ export async function GET(request: Request) {
     if (sources.pexels && (!wanted || wanted === "pexels")) jobs.push(searchPexels(query, kind));
     if (sources.unsplash && kind === "image" && (!wanted || wanted === "unsplash")) jobs.push(searchUnsplash(query));
     const settled = await Promise.allSettled(jobs);
-    const items = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    // best footage first, whichever library it came from
+    const items = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []).sort((left, right) => right.score - left.score);
     return NextResponse.json({ sources, items });
   } catch {
     return NextResponse.json({ sources, items: [], error: "SEARCH_FAILED" }, { status: 502 });

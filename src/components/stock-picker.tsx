@@ -14,22 +14,28 @@ export function StockPicker({ initialQuery, locale = "en", onPick, onClose }: { 
   const [sources, setSources] = useState<Sources | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "empty" | "error">("idle");
 
+  async function runSearch(nextQuery: string, nextKind: "image" | "video") {
+    const response = await fetch(`/api/stock?q=${encodeURIComponent(nextQuery.trim())}&kind=${nextKind}&lang=${nb ? "no" : "en"}`);
+    const data = await response.json() as { sources?: Sources; items?: StockItem[] };
+    return { ok: response.ok, sources: data.sources, items: data.items ?? [] };
+  }
+
+  function show(result: { ok: boolean; sources?: Sources; items: StockItem[] }) {
+    if (result.sources) setSources(result.sources);
+    setItems(result.items);
+    setState(result.ok ? (result.items.length ? "idle" : "empty") : "error");
+  }
+
   async function search(nextQuery = query, nextKind = kind) {
     if (!nextQuery.trim()) return;
     setState("loading");
-    try {
-      const response = await fetch(`/api/stock?q=${encodeURIComponent(nextQuery.trim())}&kind=${nextKind}&lang=${nb ? "no" : "en"}`);
-      const data = await response.json() as { sources?: Sources; items?: StockItem[] };
-      if (data.sources) setSources(data.sources);
-      setItems(data.items ?? []);
-      setState(response.ok ? (data.items?.length ? "idle" : "empty") : "error");
-    } catch {
-      setState("error");
-    }
+    try { show(await runSearch(nextQuery, nextKind)); } catch { setState("error"); }
   }
 
   useEffect(() => {
-    void fetch("/api/stock").then((response) => response.json()).then((data: { sources?: Sources }) => { if (data.sources) setSources(data.sources); }).catch(() => {});
+    // recommendations are waiting when the picker opens
+    if (initialQuery.trim()) void runSearch(initialQuery, "image").then(show).catch(() => setState("error"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const noKeys = sources && !sources.pixabay && !sources.unsplash && !sources.pexels;
@@ -47,10 +53,11 @@ export function StockPicker({ initialQuery, locale = "en", onPick, onClose }: { 
     {state === "loading" && <p className="field-caption">{nb ? "Søker…" : "Searching…"}</p>}
     {state === "empty" && <p className="field-caption">{nb ? "Fant ingenting. Prøv et annet søkeord." : "Nothing found. Try another search."}</p>}
     {state === "error" && <p className="field-caption" role="alert">{nb ? "Søket feilet. Prøv igjen." : "The search failed. Try again."}</p>}
-    <div className="stock-grid">{items.map((item) => <button type="button" key={`${item.source}-${item.id}`} className="stock-item" onClick={() => onPick(item)} title={`${item.credit} · ${item.source}`}>
+    {items.length > 0 && <p className="field-caption">{nb ? "★ = anbefalt: skarpest, i bredformat og med brukbar lengde." : "★ = recommended: sharpest, widescreen and a usable length."}</p>}
+    <div className="stock-grid">{items.map((item, position) => <button type="button" key={`${item.source}-${item.id}`} className={`stock-item ${position < 3 ? "recommended" : ""}`} onClick={() => onPick(item)} title={`${item.credit} · ${item.source}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {item.previewUrl ? <img src={item.previewUrl} alt={item.credit} loading="lazy" /> : <span className="stock-noprev">{nb ? "Video" : "Video"}</span>}
-      <small>{item.kind === "video" ? "▶ " : ""}{item.source === "unsplash" ? "Unsplash" : item.source === "pexels" ? "Pexels" : "Pixabay"} · {item.credit}</small>
+      <small>{position < 3 ? "★ " : ""}{item.kind === "video" ? `▶ ${item.duration ? `${Math.round(item.duration)}s ` : ""}` : ""}{item.source === "unsplash" ? "Unsplash" : item.source === "pexels" ? "Pexels" : "Pixabay"} · {item.credit}</small>
     </button>)}</div>
   </div>;
 }

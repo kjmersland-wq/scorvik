@@ -28,6 +28,9 @@ function localizeReason(reason: string, locale: Locale): string {
     [/^Instrumental options/, () => "Instrumental musikk fungerer best under tale"],
     [/^Suitable under voiceover/, () => "Egnet under fortellerstemme"],
     [/^Track length fits/, () => "Lengden passer filmen"],
+    [/^(.+) fits the page's feel/, (m) => `Stemningen «${m[1]}» passer sidens uttrykk`],
+    [/^(.+) suits this kind of page/, (m) => `${m[1]} passer til denne typen side`],
+    [/^Energy matches/, () => "Energien passer filmen"],
     [/^Strong Scorvik Original/, () => "Sterk match med Scorvik Original"],
   ];
   for (const [pattern, build] of rules) { const match = reason.match(pattern); if (match) return build(match); }

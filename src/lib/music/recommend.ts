@@ -1,4 +1,5 @@
 import { pixabayMusic } from "./pixabay-library.ts";
+import { resolveProfile } from "./profile.ts";
 import type { CreativeBrief, FilmMode, MusicTrack, SiteAnalysis } from "@/types/project";
 
 export const localMusicFiles = [
@@ -185,6 +186,23 @@ function scoreTrack(track: MusicTrack, input: MusicRecommendationInput, inferred
   const tags = `${track.mood.join(" ")} ${track.style.join(" ")} ${track.tags?.join(" ") ?? ""} ${track.subgenre} ${track.genre}`.toLowerCase();
   let score = moodAliases[track.mood[0]]?.test(moodWords) || track.mood.some((mood) => moodWords.includes(mood.toLowerCase())) ? 12 : 0;
   if (score) reasons.push(`${track.mood[0]} mood matches the brief`);
+  // How the page should sound (Claude's reading, or what the page is about): mood, genre and energy of the track.
+  const profile = resolveProfile(input.analysis, input.mode ?? "advert");
+  const moodHit = track.mood.findIndex((mood) => profile.moods.includes(mood));
+  if (moodHit >= 0) {
+    score += 14 + (profile.moods[0] === track.mood[moodHit] ? 4 : 0);
+    reasons.push(`${track.mood[moodHit]} fits the page's feel`);
+  }
+  const genreHit = profile.genres.indexOf(track.genre);
+  if (genreHit >= 0) {
+    score += genreHit === 0 ? 12 : 7;
+    reasons.push(`${track.genre} suits this kind of page`);
+  }
+  if (track.energy !== null && Number.isFinite(track.energy)) {
+    const gap = Math.abs(track.energy - profile.energy);
+    score += Math.max(0, Math.round(8 - gap * 2.5));
+    if (gap <= 1) reasons.push("Energy matches the film");
+  }
   const requestedMoods = input.userMoods?.map((mood) => mood.toLowerCase()) ?? [];
   if (requestedMoods.some((mood) => tags.includes(mood))) {
     score += 12;

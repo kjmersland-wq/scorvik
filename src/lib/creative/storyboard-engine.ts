@@ -1,5 +1,6 @@
 import { condenseCaption, footerNoise, highlightKeywords } from "./captions.ts";
 import { closingQuestion, focusHeadline, introQuestion } from "./copy-voice.ts";
+import { appealScore, overlaps } from "./key-points.ts";
 import { fitDurations, readingSeconds } from "./timing.ts";
 import { visualQueryFor } from "./visual-queries.ts";
 import type { CreativeBrief, ScenePurpose, SiteAnalysis, StoryScene, Storyboard } from "@/types/project";
@@ -61,7 +62,7 @@ function visibleSentences(analysis: SiteAnalysis): string[] {
     .filter((sentence) => sentence.length >= 35 && sentence.length <= 220);
 }
 
-function selectPlans(plans: ScenePlan[], count: number): ScenePlan[] {
+function evenlySpaced(plans: ScenePlan[], count: number): ScenePlan[] {
   if (plans.length <= count) return plans;
   if (count <= 2) return [plans[0], plans[plans.length - 1]];
   const middle = plans.slice(1, -1);
@@ -71,6 +72,25 @@ function selectPlans(plans: ScenePlan[], count: number): ScenePlan[] {
     return middle[position];
   });
   return [plans[0], ...selected, plans[plans.length - 1]];
+}
+
+/**
+ * Promos keep the opening and the close, and fill the middle with the messages most likely to land: the most specific, the most
+ * useful and the most different from each other, shown in the page's own order. Guides keep their steps in order instead.
+ */
+function selectPlans(plans: ScenePlan[], count: number, mode: FilmMode = "instruction"): ScenePlan[] {
+  if (mode !== "advert") return evenlySpaced(plans, count);
+  if (plans.length <= count) return plans;
+  if (count <= 2) return [plans[0], plans[plans.length - 1]];
+  const take = count - 2;
+  // verified proof and the product itself outrank loose copy; everything else ranks by how specific and useful it is
+  const bonus: Partial<Record<ScenePurpose, number>> = { Proof: 4, Product: 3, Benefit: 2 };
+  const pool = plans.slice(1, -1).map((plan, order) => ({ plan, order, score: appealScore(`${plan.headline} ${plan.supportingText}`) + (bonus[plan.purpose] ?? 0) })).sort((left, right) => right.score - left.score || left.order - right.order);
+  const chosen: typeof pool = [];
+  for (const item of pool) if (chosen.length < take && !chosen.some((kept) => overlaps(`${kept.plan.headline} ${kept.plan.supportingText}`, `${item.plan.headline} ${item.plan.supportingText}`))) chosen.push(item);
+  for (const item of pool) if (chosen.length < take && !chosen.includes(item)) chosen.push(item);
+  chosen.sort((left, right) => left.order - right.order);
+  return [plans[0], ...chosen.map((item) => item.plan), plans[plans.length - 1]];
 }
 
 function sameSourceText(first: string, second: string): boolean {
@@ -167,7 +187,9 @@ export function buildStoryboard(
   }
   if (!candidates.length) candidates = [makePlan("Story", analysis.title || analysis.brand, analysis.description)];
   const cleaned = candidates.filter((plan) => !footerNoise.test(`${plan.headline} ${plan.supportingText}`));
-  const selected = selectPlans(cleaned.length ? cleaned : candidates, count);
+  const pool = cleaned.length ? cleaned : candidates;
+  const selected = selectPlans(pool, count, mode);
+  const leftOut = pool.filter((plan) => !selected.includes(plan) && appealScore(`${plan.headline} ${plan.supportingText}`) >= 3).sort((left, right) => appealScore(`${right.headline} ${right.supportingText}`) - appealScore(`${left.headline} ${left.supportingText}`)).map((plan) => plan.headline).slice(0, 6);
   // Scorvik's copy voice (see copy-voice.ts): soft questions at the open and close, one message per scene.
   const language = /^n[bo]?/i.test(analysis.language ?? "") ? "no" : (options.locale ?? "en");
   const seed = analysis.brand || analysis.title;
@@ -224,6 +246,7 @@ export function buildStoryboard(
   const storyboard: Storyboard = {
     scenes,
     totalDuration: scenes.reduce((sum, scene) => sum + scene.duration, 0),
+    leftOut,
     requestedDuration,
     durationToleranceSeconds,
     durationWithinTolerance: Math.abs(scenes.reduce((sum, scene) => sum + scene.duration, 0) - requestedDuration) <= durationToleranceSeconds,

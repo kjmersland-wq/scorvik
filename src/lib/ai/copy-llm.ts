@@ -78,7 +78,7 @@ export function validateScenes(output: unknown, input: CopyScene[], source: stri
   });
 }
 
-async function askClaude(system: string, user: string): Promise<string | undefined> {
+export async function askClaude(system: string, user: string): Promise<string | undefined> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return undefined;
   const response = await fetch("https://api.anthropic.com/v1/messages", {

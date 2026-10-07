@@ -115,3 +115,33 @@ test("pictures follow what the scene says", () => {
   assert.equal(visualQueryFor("Hook", site, "advert", "Familien på tur med bobil"), "motorhome camper van road");
   assert.equal(visualQueryFor("Hook", site, "advert", "Something unrelated"), "family road trip car"); // falls back to the site's own theme
 });
+
+import { validateInsight } from "../src/lib/ai/insight.ts";
+import { resolveProfile, sanitizeProfile, topicProfile } from "../src/lib/music/profile.ts";
+import { demoMusicCatalog, recommendMusic } from "../src/lib/music/recommend.ts";
+import { createCreativeBrief } from "../src/lib/creative/create-brief.ts";
+
+test("model insight keeps only what the page supports", () => {
+  const source = "AutoVere covers tolls, vignettes, fuel and ferries in 30+ countries for cars and motorhomes.";
+  const out = validateInsight({
+    keyPoints: [{ text: "Tolls and vignettes in 30+ countries", strength: 5 }, { text: "Trusted by 2 million drivers", strength: 5 }, { text: "tiny", strength: 2 }],
+    music: { moods: ["Adventurous", "Nonsense"], genres: ["World"], energy: 14, reason: "Open road" },
+  }, source);
+  assert.deepEqual(out?.keyPoints.map((point) => point.text), ["Tolls and vignettes in 30+ countries"]);
+  assert.deepEqual(out?.music?.moods, ["Adventurous"]);
+  assert.equal(out?.music?.energy, 10);
+  assert.equal(sanitizeProfile({ moods: [], genres: ["World"], energy: 5 }), undefined);
+});
+
+test("music follows what the page is about, for guides and for promos", () => {
+  const road: SiteAnalysis = { ...base, title: "Road trip toll planner", description: "Tolls and vignettes for motorhomes" };
+  assert.deepEqual(topicProfile(road, "advert").moods.slice(0, 1), ["Adventurous"]);
+  const guide = topicProfile(road, "instruction");
+  assert.equal(guide.moods[0], "Calm");
+  assert.ok(guide.energy < topicProfile(road, "advert").energy);
+  const blues: SiteAnalysis = { ...base, title: "The Global Blues Encyclopedia" };
+  assert.equal(resolveProfile(blues, "advert").genres[0], "Blues");
+  const top = recommendMusic({ analysis: blues, brief: createCreativeBrief(blues), duration: 30, platform: "youtube", mode: "advert" })[0];
+  assert.ok(top.track.genre === "Blues" || top.track.mood.includes("Blues"), `top pick was ${top.track.title}`);
+  assert.ok(demoMusicCatalog.length > 60);
+});

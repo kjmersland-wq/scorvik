@@ -57,7 +57,7 @@ export function createCreativeBrief(
   options: { mode?: FilmMode; targetDuration?: number } = {},
 ): CreativeBrief {
   const profile = analysis.brandProfile ?? detectBrandProfile(analysis);
-  const keyBenefits = analysis.sellingPoints.slice(0, 5);
+  const keyBenefits = analysis.sellingPoints.slice(0, 8);
   const titleHead = analysis.title.split(/\s[|–—-]\s/)[0]?.trim() ?? "";
   const rawHeadline = analysis.headings?.[0] || analysis.title;
   const firstHeadline = rawHeadline.length > 70 && titleHead.length >= 12 && titleHead.length <= 70 ? titleHead : rawHeadline;

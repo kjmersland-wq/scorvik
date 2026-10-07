@@ -42,6 +42,15 @@ export interface StoryScene {
   soundCue?: string;
 }
 
+export interface MusicProfile {
+  moods: string[];
+  genres: string[];
+  /** 1 very calm .. 10 intense */
+  energy: number;
+  reason: string;
+  source: "ai" | "topic";
+}
+
 export interface SiteAnalysis {
   url: string;
   title: string;
@@ -60,6 +69,8 @@ export interface SiteAnalysis {
   visibleText?: string;
   images?: string[];
   logoCandidates?: string[];
+  /** how the page should sound; set from Claude's reading of the page when available */
+  musicProfile?: MusicProfile;
   /** alt text, title and file name for each image URL; used to pair names and headings with the right picture */
   imageAlts?: Record<string, string>;
   relevantLinks?: Array<{ label: string; url: string }>;
@@ -114,6 +125,8 @@ export interface Storyboard {
   durationToleranceSeconds?: number;
   durationWithinTolerance?: boolean;
   rationale: string;
+  /** strong messages found on the page that did not get a scene, strongest first */
+  leftOut?: string[];
 }
 
 export interface MusicTrack {

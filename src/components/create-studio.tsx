@@ -12,6 +12,8 @@ import { saveVideo } from "@/lib/video-store";
 import { VersionsPanel } from "@/components/versions-panel";
 import { StockPicker } from "@/components/stock-picker";
 import { classifyIntent } from "@/lib/creative/intent";
+import { imageHasLettering } from "@/lib/render/lettering";
+import { fitDurations, readingSeconds } from "@/lib/creative/timing";
 import type { StockItem } from "@/lib/stock/search";
 import type { CreativeBrief, FilmMode, ScenePurpose, SiteAnalysis, StoryScene, VideoFormat, VideoProject, VideoSettings } from "@/types/project";
 import { MusicStudio } from "@/components/music-studio";
@@ -85,6 +87,9 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   const [replaceSitePictures, setReplaceSitePictures] = useState(false);
   const [autoFill, setAutoFill] = useState(true);
   const [fillNote, setFillNote] = useState("");
+  const [recommendation, setRecommendation] = useState<{ seconds: number; keyPoints: number; mode: FilmMode } | null>(null);
+  const [leftOut, setLeftOut] = useState<string[]>([]);
+  const [lengthChosen, setLengthChosen] = useState(false);
   useEffect(() => {
     void fetch("/api/stock").then((response) => response.json()).then((data: { sources?: { pixabay: boolean; unsplash: boolean; pexels: boolean } }) => { if (data.sources) setStockSources(data.sources); }).catch(() => {});
   }, []);
@@ -107,6 +112,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
 
   function selectDuration(duration: number) {
     setDurationWasChosen(true);
+    setLengthChosen(true);
     updateSetting("duration", duration);
     if (!analysis) return;
     const brief = createCreativeBrief(analysis, { mode: filmMode, targetDuration: duration });
@@ -161,7 +167,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         body: JSON.stringify({
           url,
           mode,
-          duration: mode === "instruction" && !durationWasChosen ? undefined : settings.duration,
+          duration: lengthChosen ? settings.duration : undefined, // untouched length = the engine's recommendation for this page
           platform: settings.platformPresetIds?.[0] ?? "youtube",
           language: settings.language,
         }),
@@ -177,6 +183,8 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       setAnalysis(nextAnalysis);
       setCreativeBrief(nextBrief);
       setScenes(nextScenes);
+      setRecommendation(result.recommendation ?? null);
+      setLeftOut(result.storyboard?.leftOut ?? []);
       const sourcesReady = autoFill && stockSources && (stockSources.pixabay || stockSources.pexels || stockSources.unsplash);
       // Claude rewrites the text first, so the pictures are searched for what each scene finally says
       void polishInBackground(nextScenes, nextAnalysis, copyTone, false, mode).then((merged) => { if (sourcesReady) void fillVisualsFromStock(merged); });
@@ -224,6 +232,18 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     setStage("storyboard");
   }
 
+  // Adds a point the engine left out as a new scene just before the closing one (the film gets longer by what it needs to read).
+  function addPointAsScene(point: string) {
+    setScenes((current) => {
+      const template = current[Math.max(0, current.length - 2)] ?? current[0];
+      if (!template) return current;
+      const fresh: StoryScene = { ...template, id: crypto.randomUUID(), purpose: "Benefit", headline: point.length > 70 ? `${point.slice(0, 67)}…` : point, supportingText: "", voiceover: point, duration: 5, visualSource: "website-image", typography: { emphasis: [] }, videoUrl: undefined, credit: undefined, noOverlay: undefined };
+      const next = [...current.slice(0, -1), fresh, current[current.length - 1]];
+      const { durations } = fitDurations(next.map((scene) => readingSeconds(`${scene.headline} ${scene.supportingText}`)), settings.duration);
+      return next.map((scene, index) => ({ ...scene, duration: durations[index] }));
+    });
+  }
+
   function changeScene(id: string, patch: Partial<StoryScene>) {
     setScenes((current) => current.map((scene) => scene.id === id ? { ...scene, ...patch } : scene));
   }
@@ -239,10 +259,15 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     setFillNote("");
     let clips = 0;
     let pictures = 0;
+    let swapped = 0;
     const used = new Set<string>();
     for (const scene of list) {
-      if (!scene.visualQuery || scene.purpose === "CTA") continue;
-      if (scene.visualSource === "website-image" && !replaceSitePictures) continue;
+      if (!scene.visualQuery) continue;
+      // A picture with its own big lettering never gets our text on top: it is swapped for library footage.
+      const lettered = Boolean(scene.visual) && !scene.videoUrl && await imageHasLettering(scene.visual, analysis?.url ?? "");
+      if (scene.purpose === "CTA" && !lettered) continue;
+      if (scene.visualSource === "website-image" && !replaceSitePictures && !lettered) continue;
+      if (lettered) swapped += 1;
       try {
         let item: StockItem | undefined;
         if (useVideo && clips < 3) {
@@ -262,14 +287,14 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         // leave the scene as it was
       }
     }
-    setFillNote(locale === "no" ? `La til ${clips} videoklipp og ${pictures} bilder fra arkivene.` : `Added ${clips} video clips and ${pictures} pictures from the libraries.`);
+    setFillNote(locale === "no" ? `La til ${clips} videoklipp og ${pictures} bilder fra arkivene${swapped ? ` (${swapped} bilder med egen stor tekst ble byttet ut)` : ""}.` : `Added ${clips} video clips and ${pictures} pictures from the libraries${swapped ? ` (${swapped} pictures with their own big lettering were swapped out)` : ""}.`);
     setFillingVisuals(false);
   }
 
   function pickStock(id: string, item: StockItem) {
     changeScene(id, item.kind === "video"
-      ? { visual: item.previewUrl || item.url, videoUrl: item.url, credit: item.source === "pexels" ? `${item.credit} / Pexels` : undefined }
-      : { visual: item.url, videoUrl: undefined, credit: item.source === "unsplash" || item.source === "pexels" ? `${item.credit} / ${item.source === "unsplash" ? "Unsplash" : "Pexels"}` : undefined });
+      ? { visual: item.previewUrl || item.url, videoUrl: item.url, visualSource: "not-detected", credit: item.source === "pexels" ? `${item.credit} / Pexels` : undefined }
+      : { visual: item.url, videoUrl: undefined, visualSource: "not-detected", credit: item.source === "unsplash" || item.source === "pexels" ? `${item.credit} / ${item.source === "unsplash" ? "Unsplash" : "Pexels"}` : undefined });
     if (item.downloadLocation) void fetch("/api/stock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ downloadLocation: item.downloadLocation }) }).catch(() => {});
     setStockScene(null);
   }
@@ -405,7 +430,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="panel-pad"><div className="panel-head"><h3>{text.shapeFilm}</h3><small>{text.makeItYours}</small></div></div>
           <div className="settings-section"><label>{text.shareWhere}</label><div className="platform-choices">{platformPresets.map((preset) => <label key={preset.id} className={settings.platformPresetIds?.includes(preset.id) ? "checked" : ""}><input type="checkbox" checked={settings.platformPresetIds?.includes(preset.id) ?? false} onChange={(event) => { const current = settings.platformPresetIds ?? []; updateSetting("platformPresetIds", event.target.checked ? [...current, preset.id] : current.filter((id) => id !== preset.id)); if (event.target.checked) updateSetting("format", preset.format); }}/><span><b>{preset.platform}</b><small>{preset.width} × {preset.height}</small></span></label>)}</div></div>
           <div className="settings-section"><label>{text.chooseFrame}</label><div className="choice-row">{formats.map((format) => <button key={format} className={`choice ${settings.format === format ? "selected" : ""}`} onClick={() => updateSetting("format", format)}>{format}</button>)}</div></div>
-          <div className="settings-section"><label>{text.durationQuestion}</label><div className="choice-row">{durationOptions.map((duration) => <button key={duration} className={`choice ${settings.duration === duration ? "selected" : ""}`} onClick={() => selectDuration(duration)}>{duration} {text.seconds}</button>)}</div></div>
+          <div className="settings-section"><label>{text.durationQuestion}</label><div className="choice-row">{durationOptions.map((duration) => <button key={duration} className={`choice ${settings.duration === duration ? "selected" : ""}`} onClick={() => selectDuration(duration)}>{recommendation?.seconds === duration ? "★ " : ""}{duration} {text.seconds}</button>)}</div>{recommendation && <p className="field-caption">{locale === "no" ? `★ Anbefalt for denne siden: ${recommendation.seconds} sekunder (${recommendation.keyPoints} ${recommendation.mode === "instruction" ? "steg" : "sterke nøkkelpunkter"}).` : `★ Recommended for this page: ${recommendation.seconds} seconds (${recommendation.keyPoints} ${recommendation.mode === "instruction" ? "steps" : "strong key points"}).`}</p>}{leftOut.length > 0 && <div className="left-out"><p className="field-caption">{locale === "no" ? "Flere sterke punkter vi fant, men ikke tok med:" : "More strong points we found but left out:"}</p>{leftOut.map((point) => <button key={point} type="button" className="choice" onClick={() => { addPointAsScene(point); setLeftOut((current) => current.filter((item) => item !== point)); }}>+ {point.length > 60 ? `${point.slice(0, 57)}…` : point}</button>)}</div>}</div>
           <div className="settings-section"><label><input type="checkbox" checked={showTextOnScreen} onChange={(event) => { setShowTextOnScreen(event.target.checked); updateSetting("showTextOnScreen", event.target.checked); }} /> {text.textToggle}</label></div>
           <div className="settings-section"><label>{locale === "no" ? "Tekststil" : "Writing style"}</label>
             <div className="choice-row">{([["auto", "Auto", "Auto"], ["warm", "Varm", "Warm"], ["bluesy", "Bluesy", "Bluesy"], ["playful", "Lekent", "Playful"], ["elegant", "Elegant", "Elegant"]] as const).map(([id, no, en]) => <button key={id} type="button" className={`choice ${copyTone === id ? "selected" : ""}`} aria-pressed={copyTone === id} onClick={() => setCopyTone(id)}>{locale === "no" ? no : en}</button>)}</div>
