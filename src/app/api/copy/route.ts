@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { hasValidPreviewSession } from "@/lib/auth/session";
-import { copyAvailable, copyLanguages, polishScenes, translateScenes, type CopyScene } from "@/lib/ai/copy-llm";
+import { copyAvailable, copyLanguages, copyTones, detectTone, polishScenes, translateScenes, type CopyScene, type CopyTone } from "@/lib/ai/copy-llm";
 
 export const runtime = "nodejs";
 
@@ -29,13 +29,16 @@ export async function POST(request: Request) {
   try { body = await request.json() as Record<string, unknown>; } catch { return NextResponse.json({ error: { code: "INVALID" } }, { status: 400 }); }
   const scenes = readScenes(body.scenes);
   if (!scenes) return NextResponse.json({ error: { code: "INVALID" } }, { status: 400 });
+  const requested = typeof body.tone === "string" ? body.tone : "auto";
+  const sourceText = typeof body.source === "string" ? `${body.brand ?? ""} ${body.source}` : scenes.map((scene) => `${scene.headline} ${scene.supportingText}`).join(" ");
+  const tone: CopyTone = (copyTones as string[]).includes(requested) ? requested as CopyTone : (typeof body.toneHint === "string" ? detectTone(body.toneHint) : detectTone(sourceText));
   try {
     if (body.task === "translate" && typeof body.language === "string" && body.language in copyLanguages) {
-      const result = await translateScenes(body.language, scenes);
+      const result = await translateScenes(body.language, scenes, tone);
       return result ? NextResponse.json({ scenes: result }) : NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
     }
     if (body.task === "polish" && typeof body.brand === "string" && typeof body.source === "string") {
-      const result = await polishScenes(body.brand.slice(0, 120), body.source.slice(0, 6000), scenes);
+      const result = await polishScenes(body.brand.slice(0, 120), body.source.slice(0, 6000), scenes, tone);
       return result ? NextResponse.json({ scenes: result }) : NextResponse.json({ error: { code: "FAILED" } }, { status: 502 });
     }
   } catch (error) {

@@ -50,7 +50,7 @@ export function VersionsPanel({ project, locale = "en" }: { project: VideoProjec
     const response = await fetch("/api/copy", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ task: "translate", language, scenes: project.scenes.map((scene) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText })) }),
+      body: JSON.stringify({ task: "translate", tone: project.settings.copyTone ?? "auto", toneHint: `${project.analysis.brand} ${project.analysis.title} ${project.analysis.description}`, language, scenes: project.scenes.map((scene) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText })) }),
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { error?: { detail?: string } };

@@ -53,3 +53,10 @@ test("AI copy may rephrase but never add numbers or names", () => {
   assert.equal(translated?.[0].headline, "Share what happens");
   assert.equal(translated?.[1].headline, "Does this fit?");
 });
+
+import { detectTone } from "../src/lib/ai/copy-llm.ts";
+
+test("tone follows the site unless chosen", () => {
+  assert.equal(detectTone("SlowBlues — The Global Blues Encyclopedia"), "bluesy");
+  assert.equal(detectTone("Sosiale medier for restauranter"), "warm");
+});

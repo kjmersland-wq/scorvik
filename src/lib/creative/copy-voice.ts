@@ -1,4 +1,4 @@
-// Scorvik's copy voice: calm, curious and message-first. Scenes carry one idea each, openings and closings
+// Scorvik's copy voice: personal, warm and positive, calm, curious and message-first. Scenes carry one idea each, openings and closings
 // are phrased as soft questions instead of claims, and nothing is invented beyond what the website says.
 
 export type VoiceLanguage = "no" | "en";

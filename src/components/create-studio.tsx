@@ -76,6 +76,8 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     const [settings, setSettings] = useState<VideoSettings>({ ...defaultSettings, ...initialSettings, language: locale === "no" ? "Norsk" : "English", voice: locale === "no" ? text.voices.no[0] : defaultSettings.voice, mode: initialSettings.mode ?? "advert", showTextOnScreen: initialSettings.showTextOnScreen ?? true });
   const [editingScene, setEditingScene] = useState<string | null>(null);
   const [stockScene, setStockScene] = useState<string | null>(null);
+  const [copyTone, setCopyTone] = useState<"auto" | "warm" | "bluesy" | "playful" | "elegant">("auto");
+  const [rewriting, setRewriting] = useState(false);
   const [project, setProject] = useState<VideoProject | null>(null);
   const [renderPercent, setRenderPercent] = useState(0);
   const [renderError, setRenderError] = useState("");
@@ -105,13 +107,13 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   }
 
   // Optional: Claude tightens the wording (never adding facts). Silent when no API key is configured or the guard rejects a line.
-  async function polishInBackground(list: StoryScene[], site: SiteAnalysis) {
+  async function polishInBackground(list: StoryScene[], site: SiteAnalysis, tone = copyTone, force = false) {
     try {
       const source = [site.title, site.description, ...(site.headings ?? []), ...(site.subheadings ?? []), ...(site.steps ?? []).map((step) => `${step.title} ${step.description}`), (site.visibleText ?? "").slice(0, 2500)].join("\n");
       const response = await fetch("/api/copy", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ task: "polish", brand: site.brand, source, scenes: list.map((scene, index) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText, locked: index === 0 || index === list.length - 1 })) }),
+        body: JSON.stringify({ task: "polish", tone, brand: site.brand, source, scenes: list.map((scene, index) => ({ id: scene.id, purpose: scene.purpose, headline: scene.headline, supportingText: scene.supportingText, locked: index === 0 || index === list.length - 1 })) }),
       });
       if (!response.ok) return;
       const data = await response.json() as { scenes?: Array<{ id: string; headline: string; supportingText: string }> };
@@ -121,7 +123,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         const next = polished.find((item) => item.id === scene.id);
         const before = list.find((item) => item.id === scene.id);
         // never overwrite text the user has already edited
-        return next && before && scene.headline === before.headline && scene.supportingText === before.supportingText ? { ...scene, headline: next.headline, supportingText: next.supportingText } : scene;
+        return next && before && (force || (scene.headline === before.headline && scene.supportingText === before.supportingText)) ? { ...scene, headline: next.headline, supportingText: next.supportingText } : scene;
       }));
     } catch {
       // keep the template wording
@@ -251,6 +253,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         ...settings,
         mode: filmMode,
         showTextOnScreen,
+        copyTone: copyTone === "auto" ? undefined : copyTone,
         audioMix: {
           ...currentAudioMix,
           music: { ...currentAudioMix.music, fadeOutSeconds: fittedMusic?.fadeOutSeconds ?? currentAudioMix.music.fadeOutSeconds },
@@ -342,6 +345,10 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="settings-section"><label>{text.chooseFrame}</label><div className="choice-row">{formats.map((format) => <button key={format} className={`choice ${settings.format === format ? "selected" : ""}`} onClick={() => updateSetting("format", format)}>{format}</button>)}</div></div>
           <div className="settings-section"><label>{text.durationQuestion}</label><div className="choice-row">{durationOptions.map((duration) => <button key={duration} className={`choice ${settings.duration === duration ? "selected" : ""}`} onClick={() => selectDuration(duration)}>{duration} {text.seconds}</button>)}</div></div>
           <div className="settings-section"><label><input type="checkbox" checked={showTextOnScreen} onChange={(event) => { setShowTextOnScreen(event.target.checked); updateSetting("showTextOnScreen", event.target.checked); }} /> {text.textToggle}</label></div>
+          <div className="settings-section"><label>{locale === "no" ? "Tekststil" : "Writing style"}</label>
+            <div className="choice-row">{([["auto", "Auto", "Auto"], ["warm", "Varm", "Warm"], ["bluesy", "Bluesy", "Bluesy"], ["playful", "Lekent", "Playful"], ["elegant", "Elegant", "Elegant"]] as const).map(([id, no, en]) => <button key={id} type="button" className={`choice ${copyTone === id ? "selected" : ""}`} aria-pressed={copyTone === id} onClick={() => setCopyTone(id)}>{locale === "no" ? no : en}</button>)}</div>
+            <button type="button" className="button button-light button-small" disabled={rewriting || !analysis} onClick={async () => { if (!analysis) return; setRewriting(true); await polishInBackground(scenes, analysis, copyTone, true); setRewriting(false); }}>{rewriting ? (locale === "no" ? "Skriver…" : "Writing…") : (locale === "no" ? "Skriv teksten på nytt" : "Rewrite the text")}</button>
+          </div>
           <div className="settings-section"><label><input type="checkbox" checked={settings.enhanceImages !== false} onChange={(event) => updateSetting("enhanceImages", event.target.checked)} /> {locale === "no" ? "Forbedre bildene (skarphet, lys og farger)" : "Enhance pictures (sharpness, light and colour)"}</label></div>
           <div className="settings-section"><label htmlFor="language">{text.language}</label><select id="language" value={settings.language} onChange={(event) => { const language = event.target.value; updateSetting("language", language); updateSetting("voice", language === "Norsk" ? text.voices.no[0] : text.voices.en[0]); }}>{text.languageOptions.map((language) => <option key={language}>{language}</option>)}</select></div>
           <div className="settings-section"><label htmlFor="voice">{text.voice}</label><select id="voice" value={settings.voice} onChange={(event) => updateSetting("voice", event.target.value)}>{(settings.language === "Norsk" ? text.voices.no : text.voices.en).map((voice) => <option key={voice}>{voice}</option>)}</select></div>

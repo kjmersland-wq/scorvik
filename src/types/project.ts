@@ -181,6 +181,8 @@ export interface VideoSettings {
   showTextOnScreen?: boolean;
   /** sharpen, level and upscale pictures before filming (default on) */
   enhanceImages?: boolean;
+  /** writing style chosen by the user (warm, bluesy, playful, elegant); unset = detect from the site */
+  copyTone?: string;
   format: VideoFormat;
   duration: number;
   language: string;

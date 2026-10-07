@@ -95,26 +95,48 @@ export function copyAvailable(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-const polishSystem = `You write the on-screen text for short website films in Scorvik's voice: calm, curious, specific and message-first.
-Rules:
+export type CopyTone = "warm" | "bluesy" | "playful" | "elegant";
+export const copyTones: CopyTone[] = ["warm", "bluesy", "playful", "elegant"];
+
+/** Picks a tone from the site itself when the user hasn't chosen one. */
+export function detectTone(text: string): CopyTone {
+  return /\bblues\b/i.test(text) ? "bluesy" : "warm";
+}
+
+const toneNotes: Record<CopyTone, string> = {
+  warm: "Warm and personal, like a friendly person who genuinely wants to help.",
+  bluesy: "A touch of blues: unhurried, soulful, with a storyteller's cadence and a little worn-in warmth, like a good evening on the porch. Light imagery (a slow song, strings, the road home) is welcome only where it fits the facts. Blues here means soul and heart, never sadness or complaint. Keep it positive and don't overdo it.",
+  playful: "Light, smiling and a little cheeky, but still kind and clear.",
+  elegant: "Calm, refined and understated, with plenty of space between the words.",
+};
+
+function polishSystem(tone: CopyTone): string {
+  return `You write the on-screen text for short website films. It must never sound like AI or like an advert: it should sound like one real person talking to another.
+Voice: personal, warm and positive, always. Speak directly to the viewer (natural "du"/"dere" in Norwegian, "you" in English). ${toneNotes[tone]}
+Style rules:
+- Short, concrete sentences with a natural rhythm. Everyday words. Say what it feels like, not what it "enables".
+- Positive framing: lead with what the viewer gains or enjoys.
+- Avoid AI and marketing clichés: "unlock", "elevate", "seamless", "leverage", "game-changer", "revolutionary", "in today's world", "whether you're", "dive into", "journey", stacked triplets, and long dash-chains. No exclamation marks, no emoji, no hashtags.
+- In Norwegian use natural bokmål that reads as written by a person, not translated.
+Fact rules:
 - Use ONLY facts found in the SOURCE. Never invent numbers, prices, names, awards, guarantees, results or claims.
 - One idea per scene. Headline at most 8 words. Supporting line at most 16 words, or empty.
-- Plain, warm language. No hype, no exclamation marks, no clichés ("game-changer", "revolutionary").
 - Keep the language of the source text.
 - Scenes marked locked:true must be returned exactly as given.
 - Return ONLY a JSON array of {"id","headline","supportingText"} for every scene, same ids, same order.`;
+}
 
-export async function polishScenes(brand: string, source: string, scenes: CopyScene[]): Promise<CopyScene[] | undefined> {
-  const answer = await askClaude(polishSystem, `BRAND: ${brand}\nSOURCE:\n${source.slice(0, 4000)}\n\nSCENES:\n${JSON.stringify(scenes)}`);
+export async function polishScenes(brand: string, source: string, scenes: CopyScene[], tone: CopyTone = "warm"): Promise<CopyScene[] | undefined> {
+  const answer = await askClaude(polishSystem(tone), `BRAND: ${brand}\nSOURCE:\n${source.slice(0, 4000)}\n\nSCENES:\n${JSON.stringify(scenes)}`);
   const parsed = validateScenes(parseJsonArray(answer), scenes, `${brand} ${source}`, false);
   if (!parsed) throw new Error("Claude answered in an unexpected format.");
   return parsed;
 }
 
-export async function translateScenes(language: string, scenes: CopyScene[]): Promise<CopyScene[] | undefined> {
+export async function translateScenes(language: string, scenes: CopyScene[], tone: CopyTone = "warm"): Promise<CopyScene[] | undefined> {
   const target = copyLanguages[language];
   if (!target) return undefined;
-  const system = `You translate on-screen film text into ${target}. Keep the meaning, tone and length; keep brand names and numbers exactly as written. Do not add or remove claims. Return ONLY a JSON array of {"id","headline","supportingText"} with the same ids and order. Headlines at most ${headlineLimit} characters.`;
+  const system = `You translate on-screen film text into ${target}. Keep the meaning and length, and keep the voice personal, warm and positive, never like a machine translation (${toneNotes[tone]}); keep brand names and numbers exactly as written. Do not add or remove claims. Return ONLY a JSON array of {"id","headline","supportingText"} with the same ids and order. Headlines at most ${headlineLimit} characters.`;
   const answer = await askClaude(system, JSON.stringify(scenes.map(({ id, headline, supportingText }) => ({ id, headline, supportingText }))));
   const parsed = validateScenes(parseJsonArray(answer), scenes, "", true);
   if (!parsed) throw new Error("Claude answered in an unexpected format.");
