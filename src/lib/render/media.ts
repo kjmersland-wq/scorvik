@@ -1,10 +1,6 @@
-import { mkdir, stat, writeFile } from "node:fs/promises";
-import path from "node:path";
 import https from "node:https";
 import http from "node:http";
 import type { IncomingHttpHeaders, RequestOptions } from "node:http";
-import type { VideoProject } from "@/types/project";
-import { scorvikOriginalMusic } from "../music/recommend.ts";
 import { createPinnedLookup } from "../ingestion/fetch-html.ts";
 import { normalizeWebsiteUrl, resolvePublicAddresses, WebsiteIngestionError, type ResolvedAddress } from "../ingestion/security.ts";
 import { RenderError } from "./validation.ts";
@@ -64,7 +60,7 @@ function requestPinnedImage(url: URL, address: ResolvedAddress, timeoutMs: numbe
   });
 }
 
-async function fetchProjectImage(input: string, baseUrl: string): Promise<{ body: Buffer; extension: string }> {
+export async function fetchProjectImage(input: string, baseUrl: string): Promise<{ body: Buffer; contentType: string }> {
   let url: URL;
   try {
     url = normalizeWebsiteUrl(new URL(input, baseUrl).href);
@@ -102,68 +98,8 @@ async function fetchProjectImage(input: string, baseUrl: string): Promise<{ body
     if (response.status !== 200) throw new RenderError("INVALID_MEDIA", `Project image returned HTTP ${response.status}.`);
     const contentType = String(response.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
     if (!supportedImageTypes.has(contentType)) throw new RenderError("INVALID_MEDIA", "Project images must be JPEG, PNG, or WebP.");
-    const extension = contentType === "image/jpeg" ? ".jpg" : contentType === "image/png" ? ".png" : ".webp";
     if (!response.body.length) throw new RenderError("INVALID_MEDIA", "A project image was empty.");
-    return { body: response.body, extension };
+    return { body: response.body, contentType };
   }
   throw new RenderError("INVALID_MEDIA", "Could not follow the project image URL.");
-}
-
-export async function prepareSceneImages(
-  project: VideoProject,
-  directory: string,
-  validateDecodedImage: (filePath: string) => Promise<boolean>,
-): Promise<string[]> {
-  const imageDirectory = path.join(directory, "images");
-  await mkdir(imageDirectory, { recursive: true });
-  const logos = new Set(project.analysis.logoCandidates ?? []);
-  const fallbacks = [project.thumbnailUrl, project.analysis.openGraphImage, ...(project.analysis.images ?? []).filter((image) => !logos.has(image)), project.analysis.image]
-    .filter((value): value is string => Boolean(value));
-  const cache = new Map<string, string>();
-  const sceneImages: string[] = [];
-
-  for (const [index, scene] of project.scenes.entries()) {
-    const candidates = [...new Set([scene.visual, ...fallbacks].filter((value): value is string => Boolean(value)))];
-    let resolved: string | undefined;
-    for (const [candidateIndex, candidate] of candidates.entries()) {
-      const cached = cache.get(candidate);
-      if (cached) {
-        resolved = cached;
-        break;
-      }
-      try {
-        const fetched = await fetchProjectImage(candidate, project.analysis.url);
-        const filePath = path.join(imageDirectory, `scene-${String(index).padStart(3, "0")}-candidate-${candidateIndex}${fetched.extension}`);
-        await writeFile(filePath, fetched.body, { flag: "wx" });
-        if (!(await validateDecodedImage(filePath))) continue;
-        cache.set(candidate, filePath);
-        resolved = filePath;
-        break;
-      } catch {
-        continue;
-      }
-    }
-    if (!resolved) throw new RenderError("MISSING_VISUAL", `Scene ${index + 1} has no valid project-specific image or fallback.`);
-    sceneImages.push(resolved);
-  }
-  return sceneImages;
-}
-
-export async function resolveSelectedMusic(project: VideoProject): Promise<{ filePath: string; duration: number } | undefined> {
-  const trackId = project.settings.musicTrackId;
-  if (!trackId) return undefined;
-  const track = scorvikOriginalMusic.find((candidate) => candidate.id === trackId);
-  if (!track || !track.audioUrl?.startsWith("/music/")) throw new RenderError("MISSING_AUDIO", "The selected music track is not available to the renderer.");
-  const filename = track.audioUrl.slice("/music/".length);
-  if (path.basename(filename) !== filename) throw new RenderError("INVALID_MEDIA", "The selected music path is invalid.");
-  const filePath = path.resolve(process.cwd(), "public", "music", filename);
-  const musicRoot = path.resolve(process.cwd(), "public", "music") + path.sep;
-  if (!filePath.startsWith(musicRoot)) throw new RenderError("INVALID_MEDIA", "The selected music path is outside the curated library.");
-  try {
-    const file = await stat(filePath);
-    if (!file.isFile() || file.size <= 0) throw new Error("not a nonempty file");
-  } catch {
-    throw new RenderError("MISSING_AUDIO", "The selected local music file is not available.");
-  }
-  return { filePath, duration: track.duration };
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deleteProject, getProject, getProjectThumbnail, getProjectVideoUrl, readProjects, saveProject, selectProjectThumbnail, subscribeProjects } from "../src/lib/projects.ts";
+import { deleteProject, getProject, getProjectThumbnail, readProjects, saveProject, selectProjectThumbnail, subscribeProjects } from "../src/lib/projects.ts";
 import type { SiteAnalysis, StoryScene, VideoProject } from "../src/types/project.ts";
 
 const scene = (id: string, visual: string, order = 0, visualSource?: StoryScene["visualSource"]): StoryScene => ({
@@ -104,20 +104,4 @@ test("backfills legacy thumbnails and deletes only the selected localStorage pro
   assert.equal(deleteProject("missing"), false);
   assert.deepEqual(readProjects().map((project) => project.id), ["third", "second"]);
   assert.equal(notifications, 2);
-});
-
-test("project preview accepts only a completed real MP4 render and preserves project content", () => {
-  const project = makeProject("playback", analysis(), [scene("preview", "https://cdn.example.com/poster.jpg")]);
-  assert.equal(getProjectVideoUrl(project), undefined);
-  assert.equal(getProjectVideoUrl({ ...project, renderJob: { renderId: "mock", status: "complete", mode: "mock", engine: "demo", outputUrl: "https://cdn.example.com/fake.mp4" } }), undefined);
-  assert.equal(getProjectVideoUrl({ ...project, renderJob: { renderId: "processing", status: "processing", mode: "real", engine: "ffmpeg", outputUrl: "https://cdn.example.com/waiting.mp4" } }), undefined);
-  const renderedProject: VideoProject = {
-    ...project,
-    renderJob: { renderId: "real", status: "complete", mode: "real", engine: "ffmpeg", outputUrl: "https://cdn.example.com/film.mp4?signature=valid" },
-  };
-  assert.equal(getProjectVideoUrl(renderedProject), "https://cdn.example.com/film.mp4?signature=valid");
-  assert.equal(getProjectVideoUrl({ ...project, renderJob: { renderId: "12345678-1234-1234-1234-123456789abc", status: "complete", mode: "real", engine: "ffmpeg", outputUrl: "/api/render/jobs/12345678-1234-1234-1234-123456789abc/video" } }), "/api/render/jobs/12345678-1234-1234-1234-123456789abc/video");
-  assert.equal(renderedProject.thumbnailUrl, project.thumbnailUrl);
-  assert.deepEqual(renderedProject.scenes, project.scenes);
-  assert.equal(getProjectVideoUrl({ ...project, renderJob: { renderId: "bad", status: "complete", mode: "real", engine: "external", outputUrl: "javascript:alert(1)" } }), undefined);
 });

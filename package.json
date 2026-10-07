@@ -8,11 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/ingestion-security.test.ts tests/website-pipeline.test.ts tests/music-platform.test.ts tests/projects.test.ts tests/render.test.ts tests/render-worker.test.ts tests/auth.test.ts tests/password-hash.test.ts tests/password-reset.test.ts"
+    "test": "node --experimental-strip-types --test tests/ingestion-security.test.ts tests/website-pipeline.test.ts tests/music-platform.test.ts tests/projects.test.ts tests/render.test.ts tests/auth.test.ts tests/password-hash.test.ts tests/password-reset.test.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1146.0",
     "@neondatabase/serverless": "^1.2.0",
+    "mp4-muxer": "^5.2.2",
     "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8"

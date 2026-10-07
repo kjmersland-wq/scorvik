@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createCreativeBrief, detectBrandProfile } from "@/lib/creative/create-brief";
 import { buildStoryboard } from "@/lib/creative/storyboard-engine";
 import { buildMockAnalysis, createScene, defaultSettings, demoScenes } from "@/lib/mock-data";
 import { defaultAudioMix, fitMusicToVideo } from "@/lib/audio/mix";
 import { saveProject } from "@/lib/projects";
+import { browserRenderSupported, renderProjectInBrowser } from "@/lib/render/browser-render";
+import { saveVideo } from "@/lib/video-store";
 import type { CreativeBrief, FilmMode, ScenePurpose, SiteAnalysis, StoryScene, VideoFormat, VideoProject, VideoSettings } from "@/types/project";
 import { MusicStudio } from "@/components/music-studio";
 import { platformPresets } from "@/lib/platforms/presets";
@@ -71,6 +73,12 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     const [settings, setSettings] = useState<VideoSettings>({ ...defaultSettings, ...initialSettings, language: locale === "no" ? "Norsk" : "English", voice: locale === "no" ? text.voices.no[0] : defaultSettings.voice, mode: initialSettings.mode ?? "advert", showTextOnScreen: initialSettings.showTextOnScreen ?? true });
   const [editingScene, setEditingScene] = useState<string | null>(null);
   const [project, setProject] = useState<VideoProject | null>(null);
+  const [renderPercent, setRenderPercent] = useState(0);
+  const [renderError, setRenderError] = useState("");
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const renderAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => { renderAbort.current?.abort(); }, []);
+  useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
   const musicDirection = creativeBrief?.brand
     ? locale === "no"
       ? ({ saas: "Minimal elektronisk: rolig, tydelig og moderne.", restaurant: "Varm og organisk lyd med god plass til fortellerstemmen.", travel: "Luftig og rolig lyd som gir rom til bildene.", ecommerce: "Moderne og nær lyd som løfter produktdetaljene.", service: "Avmålt og trygg lyd som holder fokus på stemmen.", content: "Nær og menneskelig lyd med lite konkurranse fra stemmen.", other: "Rolig, moderne lyd som følger tonen i innholdet." } as Record<string, string>)[analysis?.brandProfile?.category ?? "other"]
@@ -151,7 +159,6 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         ? recommendInstructionDuration(sourcedAnalysis.steps?.length ?? sourcedAnalysis.headings?.length ?? 1, locale).seconds
         : settings.duration;
     const brief = createCreativeBrief(enrichedAnalysis, { mode: filmMode, targetDuration: suggestedDuration });
-    const recommendation = recommendInstructionDuration(sourcedAnalysis.steps?.length ?? 1, locale);
     const storyboard = buildStoryboard(enrichedAnalysis, brief, { mode: filmMode, locale, targetDuration: suggestedDuration });
     const suggestedTrack = recommendMusic({ analysis: enrichedAnalysis, brief, duration: storyboard.totalDuration, platform: "youtube", mode: filmMode, style: settings.style })[0]?.track;
 
@@ -186,7 +193,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     });
   }
 
-  function beginRender() {
+  async function beginRender() {
     if (!analysis) return;
     const selectedTrack = settings.musicTrackId ? demoMusicCatalog.find((track) => track.id === settings.musicTrackId) : undefined;
     const fittedMusic = selectedTrack ? fitMusicToVideo(selectedTrack.duration, settings.duration) : undefined;
@@ -213,7 +220,23 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     };
     saveProject(nextProject);
     setProject(nextProject);
-    setStage("result");
+    setRenderError("");
+    setRenderPercent(0);
+    setVideoUrl(null);
+    setStage("render");
+    if (!browserRenderSupported()) { setRenderError(text.unsupported); return; }
+    const controller = new AbortController();
+    renderAbort.current = controller;
+    try {
+      const result = await renderProjectInBrowser(nextProject, setRenderPercent, controller.signal);
+      await saveVideo(nextProject.id, result.blob);
+      setVideoUrl(URL.createObjectURL(result.blob));
+      setRenderError(result.audioWarning ?? "");
+      setStage("result");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setRenderError(error instanceof Error ? error.message : text.renderFailed);
+    }
   }
 
   const labels: Stage[] = ["website", "storyboard", "render", "result"];
@@ -283,15 +306,15 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="settings-section" id="music"><MusicStudio locale={locale} mode={filmMode} analysis={analysis} brief={creativeBrief ?? { objective: "Present the clearest information found on the website.", durationMode: filmMode, targetDuration: settings.duration, durationGuidance: "Use the selected duration without repeating source content.", brand: analysis.brand, productOrService: "", valueProposition: analysis.description, targetAudience: [], coreMessage: analysis.description, keyBenefits: analysis.sellingPoints, tone: ["modern"], visualStyle: settings.style, suggestedHook: analysis.title, callToAction: "", suggestedPacing: "balanced", suggestedMusicDirection: "Modern", suggestedVoiceDirection: "Clear", recommendedPlatforms: [], evidence: [], confidence: "low" }} duration={settings.duration} selectedTrackId={settings.musicTrackId ?? null} onSelect={(trackId) => updateSetting("musicTrackId", trackId)}/></div>
           <div className="settings-section"><label>{text.musicFeel}</label><p>{musicDirection}</p><small>{text.noLicensedMusic}</small></div>
           <div className="settings-section mixer-section"><label>{text.adjustSound}</label>{([[text.voiceLevel, "voice", 0.8], [text.musicLevel, "music", 0.55], [text.sceneSounds, "sfx", 0.25]] as const).map(([label, key, defaultValue]) => <div className="mixer-row" key={key}><span>{label}</span><input aria-label={`${label} level`} type="range" min="0" max="1" step="0.05" value={settings.audioMix?.[key].volume ?? defaultValue} onChange={(event) => updateSetting("audioMix", { ...(settings.audioMix ?? { voice: { volume: 0.8, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, music: { volume: 0.55, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, sfx: { volume: 0.25, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, jingle: { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, duckMusicUnderVoice: true }), [key]: { ...(settings.audioMix?.[key] ?? { volume: defaultValue, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }), volume: Number(event.target.value) } })}/><b>{Math.round((settings.audioMix?.[key].volume ?? defaultValue) * 100)}%</b></div>)}{filmMode === "advert" && <div className="mixer-row"><span>{text.closingSound}</span><input aria-label={`${text.closingSound} level`} type="range" min="0" max="1" step="0.05" value={settings.audioMix?.jingle.volume ?? 0.35} onChange={(event) => updateSetting("audioMix", { ...(settings.audioMix ?? { voice: { volume: 0.8, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, music: { volume: 0.55, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, sfx: { volume: 0.25, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, jingle: { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }, duckMusicUnderVoice: true }), jingle: { ...(settings.audioMix?.jingle ?? { volume: 0.35, muted: false, fadeInSeconds: 0.8, fadeOutSeconds: 1.5, startSeconds: 0 }), volume: Number(event.target.value) } })}/><b>{Math.round((settings.audioMix?.jingle.volume ?? 0.35) * 100)}%</b></div>}<small>{text.mixNote}</small></div>
-          <div className="settings-footer"><button className="button" disabled={!scenes.length} onClick={beginRender}>{text.makeFilm} <span aria-hidden="true">→</span></button><p>{text.savedPreview}</p></div>
+          <div className="settings-footer"><button className="button" disabled={!scenes.length} onClick={() => void beginRender()}>{text.makeFilm} <span aria-hidden="true">→</span></button><p>{text.savedPreview}</p></div>
         </aside>
       </div>}
 
-      {stage === "render" && <section className="panel render-card"><div className="render-mark" aria-hidden="true">S</div><span className="eyebrow">{text.renderEyebrow}</span><h2>{text.titles.render}</h2><p>{text.renderDescription}</p><div className="render-progress"><div className="progress-track"><span /></div><div className="progress-stages"><span className="complete">{text.story}</span><span className="complete">{text.sound}</span><span>{text.firstLook}</span></div></div><p className="field-caption render-note">{text.renderNote}</p></section>}
+      {stage === "render" && <section className="panel render-card"><div className="render-mark" aria-hidden="true">S</div><span className="eyebrow">{text.renderEyebrow}</span><h2>{text.titles.render}</h2><p>{text.renderDescription}</p><div className="render-progress"><div className="progress-track"><span style={{ transform: `scaleX(${renderPercent / 100})`, animation: "none", transition: "transform .3s" }} /></div><div className="progress-stages"><span className={renderPercent > 0 ? "complete" : ""}>{text.story}</span><span className={renderPercent > 3 ? "complete" : ""}>{text.sound}</span><span className={renderPercent >= 100 ? "complete" : ""}>{text.firstLook} {renderPercent}%</span></div></div>{renderError ? <p className="field-caption render-note" role="alert">{text.renderFailed}: {renderError}</p> : <p className="field-caption render-note">{text.renderNote}</p>}<div className="result-actions">{renderError ? <button className="button" onClick={() => void beginRender()}>{text.renderRetry}</button> : null}<button className="button button-light" onClick={() => { renderAbort.current?.abort(); setStage("storyboard"); }}>{text.renderCancel}</button></div></section>}
 
       {stage === "result" && project && <div className="result-layout">
-        <section className="panel result-frame"><div className="result-preview"><span className="result-play" aria-label={text.draftNotice}>▶</span><div><h2>{project.scenes[0]?.headline ?? project.title}</h2><small>{project.analysis.brand.toUpperCase()} · {text.resultEyebrow}</small></div></div></section>
-        <aside className="panel result-side"><span className="eyebrow">{text.resultEyebrow}</span><h3>{project.title}</h3><p>{project.url}</p><p>{text.draftNotice}</p><div className="result-actions"><button className="button button-light" disabled>{locale === "no" ? "Last ned MP4" : "Download MP4"}</button><button className="button" onClick={() => { const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }); const downloadUrl = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = downloadUrl; anchor.download = `${project.analysis.brand}-project.json`; anchor.click(); URL.revokeObjectURL(downloadUrl); }}>{text.downloadProject} <span aria-hidden="true">↓</span></button>{!project.settings.showTextOnScreen && <button className="button button-light" onClick={() => { const blob = new Blob([buildSrt(project.scenes)], { type: "text/plain;charset=utf-8" }); const downloadUrl = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = downloadUrl; anchor.download = `${project.analysis.brand}-subtitles.srt`; anchor.click(); URL.revokeObjectURL(downloadUrl); }}>{text.downloadSrt} <span aria-hidden="true">↓</span></button>}<button className="button button-light" onClick={() => navigator.clipboard?.writeText(project.url)}>{text.copyLink}</button><button className="button button-light" onClick={() => { setProject(null); setAnalysis(null); setUrl(""); setStage("website"); }}>{text.anotherDirection}</button></div><div className="result-details"><div><span>{text.length}</span><b>{project.settings.duration} {text.seconds}</b></div><div><span>{text.format}</span><b>{project.settings.format}</b></div><div><span>{text.feeling}</span><b>{project.settings.style}</b></div><div><span>{text.scenes}</span><b>{project.scenes.length}</b></div></div><Link href={localizedPath(locale, `/projects/${project.id}`)} className="text-link result-detail-link">{text.fullStory} →</Link></aside>
+        <section className="panel result-frame"><div className="result-preview">{videoUrl ? <video src={videoUrl} controls playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} /> : <div><h2>{project.scenes[0]?.headline ?? project.title}</h2><small>{project.analysis.brand.toUpperCase()} · {text.resultEyebrow}</small></div>}</div></section>
+        <aside className="panel result-side"><span className="eyebrow">{text.resultEyebrow}</span><h3>{project.title}</h3><p>{project.url}</p><p>{text.draftNotice}</p><div className="result-actions">{videoUrl && <a className="button" href={videoUrl} download={`${project.analysis.brand}.mp4`}>{text.downloadMp4} <span aria-hidden="true">↓</span></a>}<button className="button" onClick={() => { const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }); const downloadUrl = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = downloadUrl; anchor.download = `${project.analysis.brand}-project.json`; anchor.click(); URL.revokeObjectURL(downloadUrl); }}>{text.downloadProject} <span aria-hidden="true">↓</span></button>{!project.settings.showTextOnScreen && <button className="button button-light" onClick={() => { const blob = new Blob([buildSrt(project.scenes)], { type: "text/plain;charset=utf-8" }); const downloadUrl = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = downloadUrl; anchor.download = `${project.analysis.brand}-subtitles.srt`; anchor.click(); URL.revokeObjectURL(downloadUrl); }}>{text.downloadSrt} <span aria-hidden="true">↓</span></button>}<button className="button button-light" onClick={() => navigator.clipboard?.writeText(project.url)}>{text.copyLink}</button><button className="button button-light" onClick={() => { setProject(null); setAnalysis(null); setUrl(""); setStage("website"); }}>{text.anotherDirection}</button></div><div className="result-details"><div><span>{text.length}</span><b>{project.settings.duration} {text.seconds}</b></div><div><span>{text.format}</span><b>{project.settings.format}</b></div><div><span>{text.feeling}</span><b>{project.settings.style}</b></div><div><span>{text.scenes}</span><b>{project.scenes.length}</b></div></div><Link href={localizedPath(locale, `/projects/${project.id}`)} className="text-link result-detail-link">{text.fullStory} →</Link></aside>
       </div>}
     </div>
   );

@@ -2,19 +2,30 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { getProjectThumbnail, getProjectVideoUrl, getServerProjects, readProjects, subscribeProjects } from "@/lib/projects";
+import { loadVideo } from "@/lib/video-store";
+import { getProjectThumbnail, getServerProjects, readProjects, subscribeProjects } from "@/lib/projects";
 import { getCopy, localizedPath, type Locale } from "@/lib/i18n/copy";
-
-const styleLabels: Record<string, string> = { Editorial: "Thoughtful", Cinematic: "Film-like", Clean: "Clear", Energetic: "Lively", Minimal: "Quiet" };
 
 export function ProjectDetail({ id, locale = "en" }: { id: string; locale?: Locale }) {
   const projectList = useSyncExternalStore(subscribeProjects, readProjects, getServerProjects);
   const project = projectList.find((item) => item.id === id) ?? null;
   const previewImage = project ? getProjectThumbnail(project) : undefined;
-  const previewVideoUrl = project ? getProjectVideoUrl(project) : undefined;
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string | undefined>();
+  const projectId = project?.id;
   const [playbackProjectId, setPlaybackProjectId] = useState<string | null>(null);
   const isPlaybackOpen = playbackProjectId === project?.id;
   const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (!projectId) return;
+    let objectUrl: string | undefined;
+    let cancelled = false;
+    void loadVideo(projectId).then((blob) => {
+      if (cancelled || !blob) return;
+      objectUrl = URL.createObjectURL(blob);
+      setPreviewVideoUrl(objectUrl);
+    });
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [projectId]);
   const text = getCopy(locale).projectDetail;
   const href = (path: string) => localizedPath(locale, path);
   useEffect(() => {
