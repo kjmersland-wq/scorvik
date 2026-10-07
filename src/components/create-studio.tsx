@@ -87,11 +87,18 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
   const [replaceSitePictures, setReplaceSitePictures] = useState(false);
   const [autoFill, setAutoFill] = useState(true);
   const [fillNote, setFillNote] = useState("");
+  const [stockHealth, setStockHealth] = useState<Record<string, { configured: boolean; ok: boolean; error?: string }> | null>(null);
   const [recommendation, setRecommendation] = useState<{ seconds: number; keyPoints: number; mode: FilmMode } | null>(null);
   const [leftOut, setLeftOut] = useState<string[]>([]);
   const [lengthChosen, setLengthChosen] = useState(false);
   useEffect(() => {
-    void fetch("/api/stock").then((response) => response.json()).then((data: { sources?: { pixabay: boolean; unsplash: boolean; pexels: boolean } }) => { if (data.sources) setStockSources(data.sources); }).catch(() => {});
+    void fetch("/api/stock?health=1").then((response) => response.json()).then((data: { sources?: { pixabay: boolean; unsplash: boolean; pexels: boolean }; health?: Record<string, { configured: boolean; ok: boolean; error?: string }> }) => {
+      if (data.health) {
+        setStockHealth(data.health);
+        // only libraries that actually answer are used for the automatic fill
+        setStockSources({ pixabay: Boolean(data.health.pixabay?.ok), pexels: Boolean(data.health.pexels?.ok), unsplash: Boolean(data.health.unsplash?.ok) });
+      } else if (data.sources) setStockSources(data.sources);
+    }).catch(() => {});
   }, []);
   const [project, setProject] = useState<VideoProject | null>(null);
   const [renderPercent, setRenderPercent] = useState(0);
@@ -440,7 +447,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
             <div className="choice-row">{([["calm", "Rolig", "Calm"], ["kinetic", "Kinetisk (ord for ord)", "Kinetic (word by word)"]] as const).map(([id, no, en]) => <button key={id} type="button" className={`choice ${(settings.typography ?? (settings.style === "Energetic" ? "kinetic" : "calm")) === id ? "selected" : ""}`} onClick={() => updateSetting("typography", id)}>{locale === "no" ? no : en}</button>)}</div>
           </div>
           <div className="settings-section"><label>{locale === "no" ? "Bilder og video fra arkivene" : "Pictures and video from the libraries"}</label>
-            <p className="field-caption">{stockSources ? [["Pexels", stockSources.pexels], ["Unsplash", stockSources.unsplash], ["Pixabay", stockSources.pixabay]].map(([name, on]) => `${name} ${on ? "✓" : "–"}`).join("  ·  ") : "…"}</p>
+            <p className="field-caption">{stockHealth ? ([["Pexels", "pexels"], ["Unsplash", "unsplash"], ["Pixabay", "pixabay"]] as const).map(([name, key]) => { const item = stockHealth[key]; return `${name} ${!item?.configured ? (locale === "no" ? "– ikke koblet" : "– not connected") : item.ok ? "✓" : `✗ ${item.error ?? ""}`}`; }).join("  ·  ") : "…"}</p>
             <label><input type="checkbox" checked={autoFill} onChange={(event) => setAutoFill(event.target.checked)} /> {locale === "no" ? "Fyll automatisk etter analysen" : "Fill automatically after the analysis"}</label>
             <label><input type="checkbox" checked={useVideo} onChange={(event) => setUseVideo(event.target.checked)} /> {locale === "no" ? "Bruk videoklipp (mer bevegelse)" : "Use video clips (more motion)"}</label>
             <label><input type="checkbox" checked={replaceSitePictures} onChange={(event) => setReplaceSitePictures(event.target.checked)} /> {locale === "no" ? "Bytt også sidens egne bilder" : "Replace the site's own pictures too"}</label>

@@ -8,6 +8,20 @@ export async function GET(request: Request) {
   if (!await hasValidPreviewSession()) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const { searchParams } = new URL(request.url);
   const sources = stockSources();
+  if (searchParams.get("health")) {
+    // Actively test every connected library with a tiny real search, so a wrong or expired key shows up before it costs a film.
+    const test = async (configured: boolean, run: () => Promise<StockItem[]>) => {
+      if (!configured) return { configured: false, ok: false as const };
+      try { const items = await run(); return { configured: true, ok: items.length > 0, error: items.length ? undefined : "No results" }; }
+      catch (error) { return { configured: true, ok: false as const, error: error instanceof Error ? error.message.slice(0, 80) : "Failed" }; }
+    };
+    const [pixabay, pexels, unsplash] = await Promise.all([
+      test(sources.pixabay, () => searchPixabay("road", "image", "en")),
+      test(sources.pexels, () => searchPexels("road", "image")),
+      test(sources.unsplash, () => searchUnsplash("road")),
+    ]);
+    return NextResponse.json({ sources, health: { pixabay, pexels, unsplash } });
+  }
   const query = (searchParams.get("q") ?? "").trim().slice(0, 100);
   if (!query) return NextResponse.json({ sources, items: [] });
   const kind = searchParams.get("kind") === "video" ? "video" : "image";
