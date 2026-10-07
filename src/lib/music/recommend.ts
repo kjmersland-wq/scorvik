@@ -205,6 +205,10 @@ function scoreTrack(track: MusicTrack, input: MusicRecommendationInput, inferred
       reasons.push("Tags relate to storyboard source language");
     }
   }
+  if (input.mode === "instruction" && ["Calm", "Quiet", "Warm"].includes(track.mood[0])) {
+    score += 14;
+    reasons.push("Calm music keeps attention on the steps");
+  }
   if (input.hasVoiceover && track.vocals) {
     score -= 10;
     reasons.push("Instrumental options are preferred under voiceover");

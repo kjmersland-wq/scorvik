@@ -138,7 +138,8 @@ test("instruction stories keep one scene per ordered step and explain the recomm
   const site = parseWebsiteHtml("<html><head><title>Quietform</title></head><body><h1>Work calmly</h1><ol><li>Create a workspace</li><li>Invite your team</li><li>Set up a workflow</li><li>Review the result</li></ol></body></html>", "https://quietform.example/");
   const brief = createCreativeBrief(site, { mode: "instruction", targetDuration: recommendInstructionDuration(site.steps?.length ?? 0).seconds });
   const storyboard = buildStoryboard(site, brief, { mode: "instruction", locale: "no" });
-  assert.equal(storyboard.scenes[0]?.headline, "Work calmly");
+  assert.equal(storyboard.scenes[0]?.headline, "Hva om det bare tok 4 enkle steg?");
+  assert.equal(storyboard.scenes[0]?.supportingText, "Work calmly");
   assert.deepEqual(storyboard.scenes.filter((scene) => scene.purpose === "Step").map((scene) => scene.headline), site.steps?.map((step) => step.title));
   assert.equal(storyboard.totalDuration, 60);
   assert.match(storyboard.rationale, /4 steg/);

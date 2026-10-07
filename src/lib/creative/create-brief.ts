@@ -58,7 +58,9 @@ export function createCreativeBrief(
 ): CreativeBrief {
   const profile = analysis.brandProfile ?? detectBrandProfile(analysis);
   const keyBenefits = analysis.sellingPoints.slice(0, 5);
-  const firstHeadline = analysis.headings?.[0] || analysis.title;
+  const titleHead = analysis.title.split(/\s[|–—-]\s/)[0]?.trim() ?? "";
+  const rawHeadline = analysis.headings?.[0] || analysis.title;
+  const firstHeadline = rawHeadline.length > 70 && titleHead.length >= 12 && titleHead.length <= 70 ? titleHead : rawHeadline;
   const coreMessage = analysis.description || firstHeadline;
   const extractedAudience = profile.targetAudience ?? [];
   const cta = analysis.callsToAction?.[0] ?? "";

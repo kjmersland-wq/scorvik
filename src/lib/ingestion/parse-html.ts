@@ -45,14 +45,39 @@ function extractTagText(html: string, tagName: string): string[] {
   return [...html.matchAll(pattern)].map((match) => cleanText(match[1])).filter(Boolean).slice(0, 30);
 }
 
+// Headings/list items that are never part of a how-to: "what we never do" lists, pricing, FAQ and legal sections.
+const noisySection = /\b(aldri|never|what we don'?t|hva vi ikke)\b|spørsmål|\bfaq\b|questions|cookie|personvern|privacy|vilkår|terms\b|pris|pricing|\d[\d\s.,]*\s?(kr|nok|usd|eur)\b|[$€£]\s?\d/i;
+const priceLike = /\d[\d\s.,]*\s?(kr|nok|usd|eur)\b|[$€£]\s?\d|\/\s?(mo|month|md|mnd)\b|per (month|måned)/i;
+
+function extractSteps(html: string, subheadings: string[]): Array<{ title: string; description: string }> {
+  const body = html.replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/gi, " ").replace(/<nav\b[^>]*>[\s\S]*?<\/nav\s*>/gi, " ").replace(/<footer\b[^>]*>[\s\S]*?<\/footer\s*>/gi, " ");
+  let section = "";
+  const structured: Array<{ title: string; description: string }> = [];
+  const loose: Array<{ title: string; description: string }> = [];
+  for (const match of body.matchAll(/<(h[1-4])\b[^>]*>([\s\S]*?)<\/\1\s*>|<li\b[^>]*>([\s\S]*?)<\/li\s*>/gi)) {
+    if (match[1]) { section = cleanText(match[2]); continue; }
+    const text = cleanText(match[3] ?? "");
+    if (text.length < 14 || text.length > 400 || text.split(" ").length < 3) continue;
+    if (noisySection.test(section) || text.startsWith("→") || priceLike.test(text)) continue;
+    const sub = subheadings.find((heading) => text.startsWith(heading) && text.length > heading.length);
+    if (sub) {
+      structured.push({ title: sub, description: text.slice(sub.length).trim() || sub });
+      continue;
+    }
+    const end = text.search(/[.!?](?:\s|$)/);
+    loose.push({ title: (end > 8 ? text.slice(0, end + 1) : text.slice(0, 84)).trim(), description: text });
+  }
+  return (structured.length >= 2 ? structured : [...structured, ...loose]).slice(0, 10);
+}
+
 export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
   const title = cleanText(html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1] ?? "").slice(0, 180);
   const description = getMeta(html, "name", "description") ?? getMeta(html, "property", "og:description") ?? "";
   const canonical = [...html.matchAll(/<link\b[^>]*>/gi)].map((match) => attributes(match[0])).find((attrs) => attrs.rel?.toLowerCase().split(/\s+/).includes("canonical"))?.href;
   const icon = [...html.matchAll(/<link\b[^>]*>/gi)].map((match) => attributes(match[0])).find((attrs) => /icon/i.test(attrs.rel ?? ""))?.href;
   const ogImage = getMeta(html, "property", "og:image") ?? getMeta(html, "name", "twitter:image");
-  const headings = [...extractTagText(html, "h1"), ...extractTagText(html, "h2")].filter((text, index, all) => all.indexOf(text) === index).slice(0, 18);
-  const subheadings = [...extractTagText(html, "h3"), ...extractTagText(html, "h4")].filter((text, index, all) => all.indexOf(text) === index).slice(0, 18);
+  const headings = [...extractTagText(html, "h1"), ...extractTagText(html, "h2")].filter((text, index, all) => all.indexOf(text) === index && !noisySection.test(text)).slice(0, 18);
+  const subheadings = [...extractTagText(html, "h3"), ...extractTagText(html, "h4")].filter((text, index, all) => all.indexOf(text) === index && !noisySection.test(text)).slice(0, 18);
   const visibleText = cleanText(html.replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/gi, " ").replace(/<svg\b[^>]*>[\s\S]*?<\/svg\s*>/gi, " ")).slice(0, 16_000);
   const imageUrls = new Set<string>();
   const logoUrls = new Set<string>();
@@ -80,11 +105,7 @@ export function parseWebsiteHtml(html: string, finalUrl: string): SiteAnalysis {
   for (const label of buttons) {
     if (/shop|buy|book|start|try|contact|learn|discover|order|sign up|get started|menu|continue|next/i.test(label) && callsToAction.length < 10 && !callsToAction.includes(label)) callsToAction.push(label);
   }
-  const steps = extractTagText(html, "li").slice(0, 10).map((text) => {
-    const firstSentenceEnd = text.search(/[.!?](?:\s|$)/);
-    const title = firstSentenceEnd > 8 ? text.slice(0, firstSentenceEnd + 1) : text.slice(0, 84);
-    return { title: title.trim(), description: text };
-  });
+  const steps = extractSteps(html, subheadings);
   const colors = new Set<string>();
   for (const match of html.matchAll(/(?:color|background-color)\s*:\s*(#[\da-f]{3,8}|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%]+\))/gi)) {
     if (colors.size >= 8) break;

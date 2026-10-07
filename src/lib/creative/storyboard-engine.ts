@@ -35,6 +35,7 @@ function normalizeEvidence(value: string): string {
 }
 
 function makePlan(purpose: ScenePurpose, headline: string, supportingText = "", cta?: string): ScenePlan {
+  if (supportingText && supportingText.toLowerCase().startsWith(headline.toLowerCase())) supportingText = supportingText.slice(headline.length).trim();
   const voiceover = [headline, supportingText].filter(Boolean).join(". ");
   return { purpose, headline, supportingText, voiceover: voiceover ? `${voiceover}${/[.!?]$/.test(voiceover) ? "" : "."}` : "", cta };
 }
@@ -68,10 +69,15 @@ function selectPlans(plans: ScenePlan[], count: number): ScenePlan[] {
   return [plans[0], ...selected, plans[plans.length - 1]];
 }
 
-function concise(value: string, fallback: string): string {
+function concise(value: string, fallback: string, limit = 84): string {
   const text = value.trim().replace(/\s+/g, " ");
   if (!text) return fallback;
-  return text.length > 84 ? `${text.slice(0, 81).trimEnd()}…` : text;
+  if (text.length <= limit) return text;
+  const sentence = text.match(/^.+?[.!?](?=\s|$)/)?.[0];
+  if (sentence && sentence.length >= 12 && sentence.length <= limit) return sentence;
+  const cut = text.slice(0, limit - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 20 ? cut.slice(0, space) : cut).trimEnd().replace(/[,;:–-]$/, "")}…`;
 }
 
 function sameSourceText(first: string, second: string): boolean {
@@ -162,10 +168,24 @@ export function buildStoryboard(
     const conclusion = brief.callToAction ? [makePlan("CTA", brief.callToAction, analysis.relevantLinks?.find((link) => link.label === brief.callToAction)?.url ?? "", brief.callToAction)] : [];
     const basePlans = uniquePlans([...intro, ...steps, ...conclusion]);
     const detailCapacity = Math.max(0, count - basePlans.length);
-    candidates = uniquePlans([...intro, ...steps, ...details.slice(0, detailCapacity), ...copyDetails.slice(0, Math.max(0, detailCapacity - details.length)), ...conclusion]);
+    candidates = extractedSteps.length >= 2
+      ? uniquePlans([...intro, ...steps, ...conclusion])
+      : uniquePlans([...intro, ...steps, ...details.slice(0, detailCapacity), ...copyDetails.slice(0, Math.max(0, detailCapacity - details.length)), ...conclusion]);
   }
   if (!candidates.length) candidates = [makePlan("Story", analysis.title || analysis.brand, analysis.description)];
-  const plans = selectPlans(candidates, count);
+  const selected = selectPlans(candidates, count);
+  // Question-led, low-pressure copy in the spirit of Jeremy Miner's NEPQ: curiosity first, no hype, no invented claims.
+  const language = /^n[bo]?/i.test(analysis.language ?? "") ? "no" : (options.locale ?? "en");
+  const questions = language === "no"
+    ? { intro: (n: number) => `Hva om det bare tok ${n} enkle steg?`, close: "Høres det riktig ut for deg?" }
+    : { intro: (n: number) => `What if it only took ${n} simple steps?`, close: "Does that sound right for you?" };
+  const plans = selected.map((plan, index) => {
+    if (mode === "instruction" && extractedSteps.length >= 2 && extractedSteps.length <= 8 && index === 0 && plan.purpose === "Story" && sameSourceText(plan.headline, brief.suggestedHook)) {
+      return makePlan("Story", questions.intro(extractedSteps.length), plan.headline);
+    }
+    if (plan.purpose === "CTA" && index === selected.length - 1) return makePlan("CTA", questions.close, plan.headline, plan.cta);
+    return plan;
+  });
   const maxSceneSeconds = 18;
   const totalDuration = Math.min(requestedDuration, Math.max(15, plans.length * maxSceneSeconds));
   const perScene = Math.floor(totalDuration / plans.length);
@@ -185,7 +205,7 @@ export function buildStoryboard(
       purpose: plan.purpose,
       duration,
       headline: concise(plan.headline, ""),
-      supportingText: concise(plan.supportingText, ""),
+      supportingText: concise(plan.supportingText, "", 110),
       ...(noOverlay ? { noOverlay: true } : {}),
       voiceover: plan.voiceover,
       transition: options.locale === "no"
