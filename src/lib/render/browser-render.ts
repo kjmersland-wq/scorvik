@@ -236,8 +236,70 @@ function drawText(ctx: CanvasRenderingContext2D, scene: StoryScene, width: numbe
   ctx.globalAlpha = 1;
 }
 
+// Loads the site's logo and turns transparent logos into clean white marks (the standard treatment on dark title cards).
+async function prepareLogo(project: VideoProject, width: number, height: number): Promise<HTMLCanvasElement | undefined> {
+  const candidates = [...new Set([...(project.analysis.logoCandidates ?? []), project.analysis.faviconUrl].filter((value): value is string => Boolean(value)))].slice(0, 4);
+  for (const candidate of candidates) {
+    const bitmap = await loadBitmap(candidate, project.analysis.url);
+    if (!bitmap || bitmap.width < 24 || bitmap.height < 24) { bitmap?.close(); continue; }
+    const short = Math.min(width, height);
+    const scale = Math.min((short * 0.2) / bitmap.height, (width * 0.4) / bitmap.width, 4);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) { bitmap.close(); continue; }
+    context.imageSmoothingQuality = "high";
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    // Only simple, flat-colour marks are turned white; detailed or photographic logos are shown as they are.
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const colors = new Set<number>();
+    let opaque = 0;
+    let luminance = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] < 128) continue;
+      opaque += 1;
+      luminance += 0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2];
+      colors.add(((pixels[i] >> 5) << 6) | ((pixels[i + 1] >> 5) << 3) | (pixels[i + 2] >> 5));
+    }
+    const transparent = pixels[3] < 40;
+    if (transparent && opaque > 0 && colors.size <= 4 && luminance / opaque < 120) {
+      context.globalCompositeOperation = "source-in";
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    return canvas;
+  }
+  return undefined;
+}
+
+// Opening card: the film starts dimmed with the logo (or brand name) fading in, then lifting into the first scene.
+function drawIntro(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | undefined, brand: string, width: number, height: number, amount: number) {
+  if (amount <= 0) return;
+  const short = Math.min(width, height);
+  ctx.globalAlpha = amount * 0.62;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalAlpha = amount;
+  if (logo) ctx.drawImage(logo, (width - logo.width) / 2, (height - logo.height) / 2);
+  else {
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    tracking(ctx, "0.3em");
+    let size = Math.round(short * 0.06);
+    ctx.font = `300 ${size}px ${textFamily}`;
+    const text = brand.toUpperCase();
+    while (ctx.measureText(text).width > width * 0.84 && size > 12) { size -= 2; ctx.font = `300 ${size}px ${textFamily}`; }
+    ctx.fillText(text, width / 2 + short * 0.01, height / 2);
+    tracking(ctx, "0px");
+  }
+  ctx.globalAlpha = 1;
+}
+
 // Closing brand card: the film dims and settles on the brand name, a hairline rule and the web address.
-function drawEndCard(ctx: CanvasRenderingContext2D, brand: string, address: string, width: number, height: number, amount: number) {
+function drawEndCard(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | undefined, brand: string, address: string, width: number, height: number, amount: number) {
   if (amount <= 0) return;
   const short = Math.min(width, height);
   ctx.globalAlpha = amount * 0.68;
@@ -247,18 +309,20 @@ function drawEndCard(ctx: CanvasRenderingContext2D, brand: string, address: stri
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const brandSize = Math.round(short * 0.07);
+  const lift = logo ? short * 0.1 : 0;
+  if (logo) ctx.drawImage(logo, (width - logo.width) / 2, height / 2 - short * 0.22 - logo.height / 2 + lift);
+  const brandSize = Math.round(short * (logo ? 0.05 : 0.07));
   tracking(ctx, "0.3em");
   ctx.font = `300 ${brandSize}px ${textFamily}`;
   const brandText = brand.toUpperCase();
   let size = brandSize;
   while (ctx.measureText(brandText).width > width * 0.84 && size > 12) { size -= 2; ctx.font = `300 ${size}px ${textFamily}`; }
-  ctx.fillText(brandText, width / 2 + short * 0.01, height / 2 - short * 0.02);
-  ctx.fillRect(width / 2 - short * 0.05, height / 2 + short * 0.045, short * 0.1, Math.max(1, short * 0.002));
+  ctx.fillText(brandText, width / 2 + short * 0.01, height / 2 - short * 0.02 + lift);
+  ctx.fillRect(width / 2 - short * 0.05, height / 2 + short * 0.045 + lift, short * 0.1, Math.max(1, short * 0.002));
   tracking(ctx, "0.22em");
   ctx.font = `400 ${Math.round(short * 0.028)}px ${textFamily}`;
   ctx.fillStyle = "rgba(255,255,255,0.8)";
-  ctx.fillText(address.toUpperCase(), width / 2 + short * 0.005, height / 2 + short * 0.1);
+  ctx.fillText(address.toUpperCase(), width / 2 + short * 0.005, height / 2 + short * 0.1 + lift);
   tracking(ctx, "0px");
   ctx.globalAlpha = 1;
 }
@@ -413,6 +477,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not create a drawing surface.");
 
+  const logo = await prepareLogo(project, width, height).catch(() => undefined);
   const finish = createFinish(ctx, width, height, project.settings.style === "Cinematic");
   const brand = project.analysis.brand || project.title;
   const address = (() => { try { return new URL(project.analysis.url).hostname.replace(/^www\./, ""); } catch { return project.analysis.url; } })();
@@ -442,8 +507,11 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const isLast = current === scenes.length - 1;
       const cardWindow = Math.min(3, scene.duration * 0.65);
       const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.8) : 0;
-      if (showText) drawText(ctx, scene, width, height, local, scene.duration, finish.letterbox, endAmount);
-      drawEndCard(ctx, brand, address, width, height, endAmount);
+      const introLength = Math.min(2.4, totalDuration * 0.2);
+      const introAmount = current === 0 ? ease(local / 0.5) * (1 - ease((local - (introLength - 0.7)) / 0.7)) : 0;
+      if (showText) drawText(ctx, scene, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount));
+      drawIntro(ctx, logo, brand, width, height, introAmount);
+      drawEndCard(ctx, logo, brand, address, width, height, endAmount);
       const fade = Math.max(Math.min(1, 1 - time / 0.4), Math.min(1, 1 - (totalDuration - time) / 0.6), 0);
       if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, fade)})`; ctx.fillRect(0, 0, width, height); }
 
