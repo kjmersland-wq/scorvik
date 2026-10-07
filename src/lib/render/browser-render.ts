@@ -243,7 +243,7 @@ async function prepareLogo(project: VideoProject, width: number, height: number)
     const bitmap = await loadBitmap(candidate, project.analysis.url);
     if (!bitmap || bitmap.width < 24 || bitmap.height < 24) { bitmap?.close(); continue; }
     const short = Math.min(width, height);
-    const scale = Math.min((short * 0.2) / bitmap.height, (width * 0.4) / bitmap.width, 4);
+    const scale = Math.min((short * 0.3) / bitmap.height, (width * 0.5) / bitmap.width, 4);
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -278,11 +278,20 @@ async function prepareLogo(project: VideoProject, width: number, height: number)
 function drawIntro(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | undefined, brand: string, width: number, height: number, amount: number) {
   if (amount <= 0) return;
   const short = Math.min(width, height);
-  ctx.globalAlpha = amount * 0.62;
+  ctx.globalAlpha = amount * 0.8;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, width, height);
   ctx.globalAlpha = amount;
-  if (logo) ctx.drawImage(logo, (width - logo.width) / 2, (height - logo.height) / 2);
+  if (logo) {
+    ctx.drawImage(logo, (width - logo.width) / 2, (height - logo.height) / 2 - short * 0.03);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    tracking(ctx, "0.3em");
+    ctx.font = `300 ${Math.round(short * 0.035)}px ${textFamily}`;
+    ctx.fillText(brand.toUpperCase(), width / 2 + short * 0.005, (height + logo.height) / 2 + short * 0.03);
+    tracking(ctx, "0px");
+  }
   else {
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
@@ -310,7 +319,7 @@ function drawEndCard(ctx: CanvasRenderingContext2D, logo: HTMLCanvasElement | un
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const lift = logo ? short * 0.1 : 0;
-  if (logo) ctx.drawImage(logo, (width - logo.width) / 2, height / 2 - short * 0.22 - logo.height / 2 + lift);
+  if (logo) { const k = 0.62; ctx.drawImage(logo, (width - logo.width * k) / 2, height / 2 - short * 0.22 - (logo.height * k) / 2 + lift, logo.width * k, logo.height * k); }
   const brandSize = Math.round(short * (logo ? 0.05 : 0.07));
   tracking(ctx, "0.3em");
   ctx.font = `300 ${brandSize}px ${textFamily}`;
@@ -507,7 +516,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const isLast = current === scenes.length - 1;
       const cardWindow = Math.min(3, scene.duration * 0.65);
       const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.8) : 0;
-      const introLength = Math.min(2.4, totalDuration * 0.2);
+      const introLength = Math.min(3, totalDuration * 0.2);
       const introAmount = current === 0 ? ease(local / 0.5) * (1 - ease((local - (introLength - 0.7)) / 0.7)) : 0;
       if (showText) drawText(ctx, scene, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount));
       drawIntro(ctx, logo, brand, width, height, introAmount);
