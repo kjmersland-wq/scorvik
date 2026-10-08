@@ -168,7 +168,7 @@ export const copy = {
       caps: [
         ["LES", "Starter med din egen nettside", "Lim inn en lenke, så bygger SCORVIK en første historie av overskriftene, teksten, bildene og trinnene som allerede står på siden."],
         ["FILM", "Ferdig MP4, laget i nettleseren", "Scener, musikk og tekst rendres til en ekte H.264-fil på din egen enhet. Fungerer best i nyere Chrome, Edge eller Safari."],
-        ["BILDER", "Dine egne bilder først", "Scenene starter med bilder fra siden din. Trenger en scene mer, kan stockbilder og -video fra Pexels, Pixabay og Unsplash fylle inn."],
+        ["BILDER", "Dine egne bilder først", "Scenene starter med bilder fra siden din. Trenger en scene mer, kan stockbilder og stockvideo fra Pexels, Pixabay og Unsplash fylle inn."],
         ["LYD", "Musikk som passer, klipp som følger den", "Velg et spor som passer siden. Klippene lander på taktslagene, og musikken tones ut etter lengden på filmen."],
         ["TEKST", "Tekst som beveger seg med historien", "Rolig inntoning eller ord for ord, plassert slik at teksten aldri kjemper med bildet."],
         ["ENHET", "Prosjektene blir hos deg", "Alt lagres i denne nettleseren på din egen enhet, og filmen lages der også."],
