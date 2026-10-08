@@ -4,6 +4,7 @@ import { anthropicKey, callTool, type ToolSpec } from "@/lib/director/claude";
 import { supportedAspects } from "@/lib/director/formats";
 import { PermanentError } from "@/lib/director/router";
 import { buildReview, failedPrecheck, precheck } from "@/lib/director/review";
+import { validReferenceImage } from "@/lib/director/library";
 import { fetchProjectImage } from "@/lib/render/media";
 
 export const runtime = "nodejs";
@@ -33,6 +34,13 @@ const maxBytes = 4_500_000;
 const mediaTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 async function imageBlock(url: string, base: string) {
+  if (url.startsWith("data:")) { // a reference picture from the library, already small
+    const checked = validReferenceImage(url);
+    const match = checked ? /^data:(image\/(?:png|jpeg|webp));base64,(.*)$/.exec(checked) : null;
+    if (!match) throw new Error("This picture cannot be reviewed.");
+    const bytes = Buffer.from(match[2], "base64");
+    return { bytes: new Uint8Array(bytes), block: { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } } };
+  }
   const image = await fetchProjectImage(url, base);
   const type = image.contentType.split(";")[0].trim().toLowerCase();
   if (!mediaTypes.has(type) || image.body.length > maxBytes) throw new Error("This picture cannot be reviewed.");
@@ -48,7 +56,7 @@ export async function POST(request: Request) {
   const aspect = typeof body.aspect === "string" ? body.aspect : "16:9";
   if (!imageUrl || !(supportedAspects as readonly string[]).includes(aspect)) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   const base = typeof body.base === "string" && body.base.length < 2000 ? body.base : imageUrl;
-  const productUrl = typeof body.productImageUrl === "string" && body.productImageUrl.length < 2000 ? body.productImageUrl : undefined;
+  const productUrl = validReferenceImage(body.productImageUrl);
   try {
     const frame = await imageBlock(imageUrl, base);
     const issues = precheck(frame.bytes, aspect);

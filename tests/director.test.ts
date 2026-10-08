@@ -176,3 +176,54 @@ test("planEdit sends the film and the instruction and returns a sanitized plan",
   assert.match(seen, /make the first scene calmer/);
   assert.equal(plan.edits[0].changes.headline, "A calmer line");
 });
+
+import { assetPrompt, findMentioned, referencesFor, sanitizeAsset, validReferenceImage, type LibraryAsset } from "../src/lib/director/library.ts";
+
+const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const bottle = sanitizeAsset({ id: "p1", kind: "product", name: "Blue Bottle", description: "A reusable water bottle", appearance: "matte blue, white cap", colors: "blue, white", prohibitedChanges: "no extra logos; keep the white cap", image: tinyPng })!;
+const anna = sanitizeAsset({ id: "c1", kind: "character", name: "Anna", appearance: "30s, short dark hair, green jacket", image: tinyPng })!;
+
+test("library entries are cleaned, and malformed or unsafe ones are dropped", () => {
+  assert.deepEqual(bottle.colors, ["blue", "white"]);
+  assert.deepEqual(bottle.prohibitedChanges, ["no extra logos", "keep the white cap"]);
+  assert.equal(sanitizeAsset({ id: "x", kind: "product", name: "  " }), null);
+  assert.equal(sanitizeAsset({ id: "x", kind: "animal", name: "Rex" }), null);
+  assert.equal(sanitizeAsset("nope"), null);
+  assert.equal(sanitizeAsset({ id: "x", kind: "product", name: "Cup", image: "javascript:alert(1)" })?.image, undefined);
+  assert.equal(sanitizeAsset({ id: "x", kind: "product", name: "Cup", image: "data:image/svg+xml;base64,AAAA" })?.image, undefined);
+  assert.equal(sanitizeAsset({ id: "x", kind: "product", name: "N".repeat(200) })?.name.length, 60);
+});
+
+test("reference pictures must be https addresses or small raster data URLs", () => {
+  assert.equal(validReferenceImage("https://example.com/a.png"), "https://example.com/a.png");
+  assert.equal(validReferenceImage("http://example.com/a.png"), undefined);
+  assert.equal(validReferenceImage(tinyPng), tinyPng);
+  assert.equal(validReferenceImage(`data:image/png;base64,${"A".repeat(3_000_001)}`), undefined);
+  assert.equal(validReferenceImage(42), undefined);
+});
+
+test("@Name finds library entries whatever the spaces and case", () => {
+  assert.deepEqual(findMentioned("Show @BlueBottle on the table", [bottle, anna]).map((asset) => asset.id), ["p1"]);
+  assert.deepEqual(findMentioned("@anna and @blue-bottle", [bottle, anna]).map((asset) => asset.id).sort(), ["c1", "p1"]);
+  assert.deepEqual(findMentioned("no mentions here", [bottle, anna]), []);
+  assert.deepEqual(findMentioned("email me@example.com", [bottle, anna]), []);
+});
+
+test("asset prompts carry the words that keep the thing the same", () => {
+  const words = assetPrompt(bottle);
+  assert.match(words, /Featured product: Blue Bottle/);
+  assert.match(words, /Never change: no extra logos; keep the white cap/);
+  assert.match(assetPrompt(anna), /Recurring character: Anna/);
+});
+
+test("a character reference wins over a product reference, and the product stays in words", () => {
+  const both = referencesFor([bottle, anna]);
+  assert.equal(both.referenceImageUrl, tinyPng);
+  assert.equal(both.productImageUrl, undefined);
+  assert.match(both.words, /Blue Bottle/);
+  const productOnly = referencesFor([bottle]);
+  assert.equal(productOnly.productImageUrl, tinyPng);
+  assert.equal(productOnly.referenceImageUrl, undefined);
+  const withoutPicture: LibraryAsset = { ...bottle, image: undefined };
+  assert.deepEqual(Object.keys(referencesFor([withoutPicture])).sort(), ["words"]);
+});

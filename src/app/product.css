@@ -24,3 +24,11 @@
 .director-edit .url-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .director-edit .field-control { flex: 1 1 260px; min-width: 0; }
 .director-picture { margin: 8px 0 2px; display: grid; gap: 4px; }
+
+.director-library { margin: 12px 0; border: 1px solid #2c2726; border-radius: 8px; padding: 10px 14px; }
+.director-library summary { cursor: pointer; font-weight: 600; }
+.library-items { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 8px; }
+.library-items li { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; }
+.library-items img, .library-noimage { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; background: #1b1818; display: grid; place-items: center; }
+.library-form { display: grid; gap: 8px; margin-top: 10px; }
+.library-preview-image { border-radius: 6px; object-fit: cover; }
