@@ -17,6 +17,11 @@ export function stripEmoji(text: string): string {
 export const footerNoise = /©|all rights reserved|privacy|cookies?\b|terms (of|and)|a product by|powered by|made (with|by)|built (with|by)|alle rettigheter|personvern|vilkår|informasjonskapsler|disclaimer|indicative|estimates only|for informational purposes|verify with official|uforpliktende|kun veiledende|facebook[^.]{0,40}linkedin|linkedin[^.]{0,40}whatsapp|bshareb[^.]{0,30}(facebook|linkedin|whatsapp|email)|follow us|følg oss|newsletter|nyhetsbrev|subscribe to|del på/i;
 
 /** Cuts text to at most `maxWords` words, preferring a sentence or clause boundary over a hard cut. */
+/** Removes punctuation left at the start of a caption when it was cut out of a longer sentence (". Information and ..."). */
+export function tidyCaption(text: string): string {
+  return text.replace(/^[\s.,;:!?–—-]+/u, "").trim();
+}
+
 export function condenseCaption(text: string, maxWords: number): string {
   const clean = stripEmoji(text);
   if (countWords(clean) <= maxWords) return clean;

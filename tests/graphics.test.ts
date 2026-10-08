@@ -29,3 +29,11 @@ test("a from-to phrase becomes a route card in the scene's language", () => {
 test("text without a list or route draws nothing special", () => {
   assert.equal(detectGraphic("Hele turen. Før du kjører."), undefined);
 });
+
+import { tidyCaption } from "../src/lib/creative/captions.ts";
+
+test("a caption cut out of a longer sentence loses its leading punctuation", () => {
+  assert.equal(tidyCaption(". Informasjon og tjenester for kjøretøy"), "Informasjon og tjenester for kjøretøy");
+  assert.equal(tidyCaption(" , – Plan trips"), "Plan trips");
+  assert.equal(tidyCaption("Already clean."), "Already clean.");
+});

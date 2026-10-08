@@ -109,7 +109,7 @@ test("text moves away from lettering, or sits on a panel when nowhere is calm", 
 import { visualQueryFor } from "../src/lib/creative/visual-queries.ts";
 
 test("pictures follow what the scene says", () => {
-  const site: SiteAnalysis = { ...base, title: "AutoVere: tolls and fuel in Europe", description: "Plan road trips" };
+  const site: SiteAnalysis = { ...base, title: "Roadwise: tolls and fuel in Europe", description: "Plan road trips" };
   assert.equal(visualQueryFor("Story", site, "advert", "Ferries across the fjord"), "ferry sailing sea");
   assert.equal(visualQueryFor("Story", site, "advert", "Bompenger i 90 land"), "highway toll road");
   assert.equal(visualQueryFor("Hook", site, "advert", "Familien på tur med bobil"), "motorhome camper van road");
@@ -122,7 +122,7 @@ import { demoMusicCatalog, recommendMusic } from "../src/lib/music/recommend.ts"
 import { createCreativeBrief } from "../src/lib/creative/create-brief.ts";
 
 test("model insight keeps only what the page supports", () => {
-  const source = "AutoVere covers tolls, vignettes, fuel and ferries in 30+ countries for cars and motorhomes.";
+  const source = "Roadwise covers tolls, vignettes, fuel and ferries in 30+ countries for cars and motorhomes.";
   const out = validateInsight({
     keyPoints: [{ text: "Tolls and vignettes in 30+ countries", strength: 5 }, { text: "Trusted by 2 million drivers", strength: 5 }, { text: "tiny", strength: 2 }],
     music: { moods: ["Adventurous", "Nonsense"], genres: ["World"], energy: 14, reason: "Open road" },

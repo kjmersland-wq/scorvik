@@ -14,10 +14,10 @@ import type { PosterBrief, SiteAnalysis } from "../src/types/project.ts";
 const measure: Measure = (text, font) => Math.round(text.length * font.size * (font.face === "display" ? 0.46 : 0.56));
 
 const base: PosterBrief = {
-  name: "AutoVere",
+  name: "Roadwise",
   claim: "Know the true cost of every kilometre.",
   palette: ["#0E1525", "#C8102E", "#012169"],
-  host: "autovere.com",
+  host: "roadwise.com",
   steps: [],
   docsHint: false,
   mock: false,
@@ -27,10 +27,10 @@ const hero = { width: 1200, height: 630 };
 
 function analysis(overrides: Partial<SiteAnalysis> = {}): SiteAnalysis {
   return {
-    url: "https://www.autovere.com/", title: "AutoVere: European road trip costs", description: "Exact tolls, fuel and ferry costs across Europe. Plan with confidence.",
-    brand: "AutoVere", colors: ["#0E1525", "#C8102E"], sellingPoints: [], image: "https://www.autovere.com/hero.jpg",
-    headings: ["Know the true cost of every kilometre."], images: ["https://www.autovere.com/logo.png", "https://www.autovere.com/hero.jpg"],
-    logoCandidates: ["https://www.autovere.com/logo.png"], visibleText: "Plan trips with exact tolls and fuel costs.",
+    url: "https://www.roadwise.com/", title: "Roadwise: European road trip costs", description: "Exact tolls, fuel and ferry costs across Europe. Plan with confidence.",
+    brand: "Roadwise", colors: ["#0E1525", "#C8102E"], sellingPoints: [], image: "https://www.roadwise.com/hero.jpg",
+    headings: ["Know the true cost of every kilometre."], images: ["https://www.roadwise.com/logo.png", "https://www.roadwise.com/hero.jpg"],
+    logoCandidates: ["https://www.roadwise.com/logo.png"], visibleText: "Plan trips with exact tolls and fuel costs.",
     ...overrides,
   };
 }
@@ -264,13 +264,13 @@ test("price is read from the page as written", () => {
 
 test("the brief comes from the existing analysis and invents nothing", () => {
   const brief = buildPosterBrief(analysis());
-  assert.equal(brief.name, "AutoVere");
+  assert.equal(brief.name, "Roadwise");
   assert.equal(brief.claim, "Know the true cost of every kilometre.");
   assert.equal(brief.price, undefined);
   assert.equal(brief.location, undefined);
-  assert.equal(brief.host, "autovere.com");
-  assert.equal(brief.logoUrl, "https://www.autovere.com/logo.png");
-  assert.equal(brief.heroUrl, "https://www.autovere.com/hero.jpg", "logos are never the hero");
+  assert.equal(brief.host, "roadwise.com");
+  assert.equal(brief.logoUrl, "https://www.roadwise.com/logo.png");
+  assert.equal(brief.heroUrl, "https://www.roadwise.com/hero.jpg", "logos are never the hero");
   assert.equal(brief.mock, false);
   assert.equal(buildPosterBrief(analysis({ visibleText: "Pakker fra 299 kr/mnd." })).price, "fra 299 kr/mnd");
   assert.equal(buildPosterBrief(analysis({ source: { submittedUrl: "x", finalUrl: "x", fetchedAt: "", mode: "mock" } })).mock, true);
@@ -296,12 +296,12 @@ test("docs pages get three numbered lines from headings already extracted", () =
 });
 
 test("helpers: host, claim candidates and hero candidates", () => {
-  assert.equal(hostOf("https://www.autovere.com/path"), "autovere.com");
+  assert.equal(hostOf("https://www.roadwise.com/path"), "roadwise.com");
   assert.equal(hostOf("not a url at all"), "not a url at all".length ? hostOf("not a url at all") : "");
-  const candidates = claimCandidates(analysis({ headings: ["AutoVere", "Know the true cost", "Know the true cost"] }));
-  assert.ok(!candidates.includes("AutoVere"), "the brand name alone is not a claim");
+  const candidates = claimCandidates(analysis({ headings: ["Roadwise", "Know the true cost", "Know the true cost"] }));
+  assert.ok(!candidates.includes("Roadwise"), "the brand name alone is not a claim");
   assert.equal(candidates.filter((c) => c === "Know the true cost").length, 1);
-  assert.ok(!heroCandidates(analysis()).includes("https://www.autovere.com/logo.png"));
+  assert.ok(!heroCandidates(analysis()).includes("https://www.roadwise.com/logo.png"));
 });
 
 // ---------- zip ----------
@@ -336,8 +336,8 @@ test("crc32 matches the standard check value", () => {
 
 test("zip holds every file intact, with Norwegian names, and is deterministic", () => {
   const entries = [
-    { name: "autovere.com-square-feed-1080x1080.png", data: new Uint8Array([137, 80, 78, 71, 0, 1, 2, 3]) },
-    { name: "autovere.com-print-a3-1754x2480.pdf", data: new TextEncoder().encode("%PDF-1.4 test") },
+    { name: "roadwise.com-square-feed-1080x1080.png", data: new Uint8Array([137, 80, 78, 71, 0, 1, 2, 3]) },
+    { name: "roadwise.com-print-a3-1754x2480.pdf", data: new TextEncoder().encode("%PDF-1.4 test") },
     { name: "øl-æø-å.png", data: new Uint8Array(70_000).map((_, i) => i % 251) },
   ];
   const zip = buildZip(entries);

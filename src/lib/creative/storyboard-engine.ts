@@ -1,4 +1,4 @@
-import { condenseCaption, footerNoise, highlightKeywords } from "./captions.ts";
+import { condenseCaption, footerNoise, highlightKeywords, tidyCaption } from "./captions.ts";
 import { closingQuestion, focusHeadline, introQuestion } from "./copy-voice.ts";
 import { appealScore, overlaps } from "./key-points.ts";
 import { fitDurations, readingSeconds } from "./timing.ts";
@@ -208,7 +208,7 @@ export function buildStoryboard(
   const captions = plans.map((plan) => {
     const focused = focusHeadline(plan.headline);
     const headline = condenseCaption(focused.headline, 8);
-    const support = condenseCaption(plan.supportingText || focused.rest, Math.max(0, 12 - headline.split(/\s+/).length));
+    const support = tidyCaption(condenseCaption(tidyCaption(plan.supportingText || focused.rest), Math.max(0, 12 - headline.split(/\s+/).length)));
     return { headline, supportingText: support.split(/\s+/).filter(Boolean).length >= 2 ? support : "" };
   });
   // Every scene lasts long enough to read: about 2.5 words a second plus a second of padding.
