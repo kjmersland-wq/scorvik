@@ -673,3 +673,13 @@ body::before {
 
 .stock-item.recommended { border-color: #d4a847; }
 .stock-item.recommended small { color: #e8c26a; }
+
+/* header on phones: one line, nothing wraps or overlaps */
+@media (max-width: 760px) {
+  .site-header .header-actions .button { font-size: 10px; white-space: nowrap; padding-inline: 10px; min-height: 36px; letter-spacing: .04em; }
+  .site-header .header-sign-out { white-space: nowrap; font-size: 11px; }
+  .site-header .brand-wordmark small { display: none; }
+}
+@media (max-width: 560px) {
+  .site-header .header-actions a.button { display: none; } /* the hero already has the prompt */
+}
