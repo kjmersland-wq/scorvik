@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { renderProjectInBrowser } from "@/lib/render/browser-render";
-import type { VideoFormat, VideoProject } from "@/types/project";
+import { referencesFor } from "@/lib/director/library";
+import { useLibrary } from "@/lib/director/library-store";
+import type { StoryScene, VideoFormat, VideoProject } from "@/types/project";
 import type { Locale } from "@/lib/i18n/copy";
 
 const formats: Array<{ id: VideoFormat; label: string; note: { en: string; no: string } }> = [
@@ -33,11 +35,16 @@ export function VersionsPanel({ project, locale = "en" }: { project: VideoProjec
   const [aiAvailable, setAiAvailable] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [busy, setBusy] = useState(false);
+  const library = useLibrary();
+  const [freshPictures, setFreshPictures] = useState(false);
+  const [pictureCosts, setPictureCosts] = useState<{ configured: boolean; draft: number | null; final: number | null } | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const aiScenes = project.scenes.filter((scene) => scene.aiPicture);
   const urls = useRef<string[]>([]);
 
   useEffect(() => {
     void fetch("/api/copy").then((response) => response.ok ? response.json() : { available: false }).then((data: { available?: boolean }) => setAiAvailable(Boolean(data.available))).catch(() => {});
+    void fetch("/api/director/image?aspect=16:9").then((response) => response.ok ? response.json() : null).then((data: { configured: boolean; draft: { costUsd: number | null }; final: { costUsd: number | null } } | null) => { if (data) setPictureCosts({ configured: data.configured, draft: data.draft.costUsd, final: data.final.costUsd }); }).catch(() => {});
     const created = urls;
     return () => { abort.current?.abort(); created.current.forEach((url) => URL.revokeObjectURL(url)); };
   }, []);
@@ -63,6 +70,28 @@ export function VersionsPanel({ project, locale = "en" }: { project: VideoProjec
     });
   }
 
+  /** Each AI picture is made again for the new frame, with that format's own composition (a crop of a wide picture rarely works in a tall frame). */
+  async function scenesForFormat(scenes: StoryScene[], format: VideoFormat, signal: AbortSignal, cache: Map<string, string>, note: (text: string) => void): Promise<StoryScene[]> {
+    if (!freshPictures || format === project.settings.format) return scenes;
+    const next: StoryScene[] = [];
+    for (const scene of scenes) {
+      if (!scene.aiPicture || signal.aborted) { next.push(scene); continue; }
+      const cached = cache.get(`${scene.id}|${format}`);
+      if (cached) { next.push({ ...scene, visual: cached, videoUrl: undefined }); continue; } // made once per format, reused by every language
+      const references = referencesFor(library.filter((asset) => scene.aiPicture!.assetIds.includes(asset.id)));
+      try {
+        note(nb ? `Lager nytt bilde for ${format}…` : `Making a new picture for ${format}…`);
+        const response = await fetch("/api/director/image", { method: "POST", headers: { "content-type": "application/json" }, signal, body: JSON.stringify({ prompt: references.words ? `${scene.aiPicture.prompt}. ${references.words}` : scene.aiPicture.prompt, aspect: format, tier: scene.aiPicture.tier, referenceImageUrl: references.referenceImageUrl, productImageUrl: references.productImageUrl }) });
+        const data = await response.json() as { url?: string };
+        if (response.ok && data.url) cache.set(`${scene.id}|${format}`, data.url);
+        next.push(response.ok && data.url ? { ...scene, visual: data.url, videoUrl: undefined } : scene);
+      } catch {
+        next.push(scene); // keep the original picture rather than failing the whole version
+      }
+    }
+    return next;
+  }
+
   async function run() {
     const plan = selectedLanguages.flatMap((language) => selectedFormats.map((format) => ({ language, format })));
     if (!plan.length) return;
@@ -72,6 +101,7 @@ export function VersionsPanel({ project, locale = "en" }: { project: VideoProjec
     abort.current = controller;
     setBusy(true);
     setJobs(plan.map(({ language, format }) => ({ key: `${language}-${format}`, label: `${languages.find((item) => item.id === language)?.label ?? language} · ${format}`, status: "waiting", percent: 0 })));
+    const pictureCache = new Map<string, string>();
     const scenesByLanguage = new Map<string, Awaited<ReturnType<typeof translate>>>();
     for (const { language, format } of plan) {
       const key = `${language}-${format}`;
@@ -79,7 +109,9 @@ export function VersionsPanel({ project, locale = "en" }: { project: VideoProjec
       patch(key, { status: "working" });
       try {
         if (!scenesByLanguage.has(language)) scenesByLanguage.set(language, await translate(language));
-        const variant: VideoProject = { ...project, settings: { ...project.settings, format }, scenes: scenesByLanguage.get(language)! };
+        const variantScenes = await scenesForFormat(scenesByLanguage.get(language)!, format, controller.signal, pictureCache, (text) => patch(key, { error: text }));
+        patch(key, { error: undefined });
+        const variant: VideoProject = { ...project, settings: { ...project.settings, format }, scenes: variantScenes };
         const result = await renderProjectInBrowser(variant, (percent) => patch(key, { percent }), controller.signal);
         const url = URL.createObjectURL(result.blob);
         urls.current.push(url);
@@ -104,6 +136,13 @@ export function VersionsPanel({ project, locale = "en" }: { project: VideoProjec
       })}</div>
       {!aiAvailable && <p className="field-caption">{nb ? "Oversettelse slås på når ANTHROPIC_API_KEY er lagt inn i Vercel." : "Translation turns on once ANTHROPIC_API_KEY is added in Vercel."}</p>}
     </div>
+    {aiScenes.length > 0 && <div className="settings-section"><label><input type="checkbox" checked={freshPictures} disabled={busy || !pictureCosts?.configured} onChange={(event) => setFreshPictures(event.target.checked)} /> {nb ? "Lag nye AI-bilder for hvert format" : "Make new AI pictures for each format"}</label>
+      <p className="field-caption">{!pictureCosts?.configured ? (nb ? "Krever FAL_KEY i .env.local." : "Needs FAL_KEY in .env.local.") : (() => {
+        const otherFormats = selectedFormats.filter((format) => format !== project.settings.format).length; // one picture per scene and format, shared by all languages
+        const count = aiScenes.length * otherFormats;
+        const cost = aiScenes.reduce((sum, scene) => sum + (pictureCosts[scene.aiPicture!.tier] ?? 0), 0) * otherFormats;
+        return nb ? `${count} nye bilder, anslått ≈ $${cost.toFixed(2)}. Uten dette brukes det samme bildet beskåret.` : `${count} new pictures, about $${cost.toFixed(2)}. Without it the same picture is cropped.`;
+      })()}</p></div>}
     <div className="result-actions">
       <button className="button" type="button" disabled={busy || !selectedFormats.length || !selectedLanguages.length} onClick={() => void run()}>{busy ? (nb ? "Lager…" : "Making…") : (nb ? `Lag ${selectedFormats.length * selectedLanguages.length} versjon(er)` : `Make ${selectedFormats.length * selectedLanguages.length} version(s)`)}</button>
       {busy && <button className="button button-light" type="button" onClick={() => abort.current?.abort()}>{nb ? "Avbryt" : "Cancel"}</button>}

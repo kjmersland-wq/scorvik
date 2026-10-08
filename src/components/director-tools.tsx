@@ -61,7 +61,7 @@ interface Estimates { configured: boolean; draft: { model: string; note: string;
 
 /** One AI picture for a scene, with the cost shown before it is spent, and an automatic quality review afterwards. */
 export function AiPicture({ locale, prompt, description, sceneText, aspect, assets, onPicture }: {
-  locale: Locale; prompt: string; description: string; sceneText: string; aspect: string; assets: LibraryAsset[]; onPicture: (url: string) => void;
+  locale: Locale; prompt: string; description: string; sceneText: string; aspect: string; assets: LibraryAsset[]; onPicture: (url: string, meta: { prompt: string; tier: "draft" | "final"; assetIds: string[] }) => void;
 }) {
   const no = locale === "no";
   const [estimates, setEstimates] = useState<Estimates | null>(null);
@@ -91,7 +91,7 @@ export function AiPicture({ locale, prompt, description, sceneText, aspect, asse
       const data = await response.json() as { url?: string; model?: string; degraded?: boolean; costUsd?: number | null; message?: string };
       if (response.status === 503) { setNote(no ? "AI-bilder krever FAL_KEY i .env.local." : "AI pictures need FAL_KEY in .env.local."); return; }
       if (!response.ok || !data.url) { setNote(no ? "Bildet kunne ikke lages. Prøv igjen." : "The picture could not be made. Try again."); return; }
-      onPicture(data.url);
+      onPicture(data.url, { prompt, tier, assetIds: used.map((asset) => asset.id) });
       setVariation((current) => current + 1);
       setNote(`${data.model}${data.degraded ? (no ? " (reservemodell)" : " (fallback model)") : ""} · ≈ ${dollars(data.costUsd ?? null)}`);
       const checked = await fetch("/api/director/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ imageUrl: data.url, description, aspect, productImageUrl: references.productImageUrl }) });

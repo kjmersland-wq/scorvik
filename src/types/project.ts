@@ -42,6 +42,8 @@ export interface StoryScene {
   videoUrl?: string;
   /** photographer credit shown on the end card when the source requires it (Unsplash) */
   credit?: string;
+  /** set when the picture was made by AI, so other formats can get their own composition */
+  aiPicture?: { prompt: string; tier: "draft" | "final"; assetIds: string[] };
   /** when set the scene is drawn from shapes instead of a picture */
   graphic?: SceneGraphic;
   visualSource?: "website-image" | "open-graph" | "not-detected";
