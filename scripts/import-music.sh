@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Re-encodes the library to 160 kbps stereo MP3 (to keep the repository small without audible loss), capping each track at 180 s with a short fade.
-# usage: scripts/import-music.sh <source-dir> <dest-dir> file1.mp3 file2.mp3 ...
+# usage: scripts/import-music.sh <source-dir> private/music file1.mp3 file2.mp3 ...
 set -euo pipefail
 src="$1"; dest="$2"; shift 2
 mkdir -p "$dest"

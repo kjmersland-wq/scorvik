@@ -2,7 +2,7 @@
 // Pixabay Content License: free for commercial use, no attribution required.
 import type { MusicTrack } from "@/types/project";
 
-interface Row { file: string; tempoBpm: number | null; title: string; artist: string; genre: string; subgenre: string; moods: string[]; usage: "ad" | "guide"; energy: number; vocals: boolean; duration: number }
+interface Row { file: string; tempoBpm: number | null; title: string; artist: string; genre: string; subgenre: string; moods: string[]; usage: "ad" | "guide"; energy: number; vocals: boolean; duration: number; added?: string }
 
 const rows: Row[] = [
   {
@@ -804,6 +804,295 @@ const rows: Row[] = [
     "energy": 7,
     "vocals": false,
     "duration": 177
+  },
+  {
+    "file": "apalonbeats-promo-promotional-showreel-music-540564.mp3",
+    "tempoBpm": 137,
+    "title": "Promotional Showreel",
+    "artist": "Apalon Beats",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bright"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 116,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "atlasaudio-cinematic-adventure-610029.mp3",
+    "tempoBpm": null,
+    "title": "Cinematic Adventure",
+    "artist": "Atlas Audio",
+    "genre": "Cinematic",
+    "subgenre": "Adventure",
+    "moods": [
+      "Cinematic",
+      "Adventurous"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 120,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "atlasaudio-cinematic-motivation-606227.mp3",
+    "tempoBpm": 79,
+    "title": "Cinematic Motivation",
+    "artist": "Atlas Audio",
+    "genre": "Cinematic",
+    "subgenre": "Inspirational",
+    "moods": [
+      "Emotional",
+      "Bold"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 110,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "atlasaudio-promo-promo-music-576651.mp3",
+    "tempoBpm": 122,
+    "title": "Promo Music",
+    "artist": "Atlas Audio",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bold"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 114,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "bombinsound-promo-promo-music-version-2-560477.mp3",
+    "tempoBpm": 92,
+    "title": "Promo Music (v2)",
+    "artist": "Bombin Sound",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bright"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 102,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "bombinsound-promo-promo-music-version-4-560475.mp3",
+    "tempoBpm": 92,
+    "title": "Promo Music (v4)",
+    "artist": "Bombin Sound",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bright"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 78,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "bombinsound-promo-promo-music-version-5-560474.mp3",
+    "tempoBpm": 92,
+    "title": "Promo Music (v5)",
+    "artist": "Bombin Sound",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bright"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 52,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "bombinsound-promo-promo-music-version-7-560472.mp3",
+    "tempoBpm": 92,
+    "title": "Promo Music (v7)",
+    "artist": "Bombin Sound",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bright"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 26,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "gr0za-promo-promo-music-573355.mp3",
+    "tempoBpm": null,
+    "title": "Promo Music A",
+    "artist": "Gr0za",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bold"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 129,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "gr0za-promo-promo-music-596446.mp3",
+    "tempoBpm": null,
+    "title": "Promo Music B",
+    "artist": "Gr0za",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bold"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 132,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "gr0za-promo-promo-music-609223.mp3",
+    "tempoBpm": null,
+    "title": "Promo Music C",
+    "artist": "Gr0za",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bold"
+    ],
+    "usage": "ad",
+    "energy": 7,
+    "vocals": false,
+    "duration": 137,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "jonasblakewood-promo-promo-music-567324.mp3",
+    "tempoBpm": 80,
+    "title": "Promo Music",
+    "artist": "Jonas Blakewood",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Bold",
+      "Energetic"
+    ],
+    "usage": "ad",
+    "energy": 7,
+    "vocals": false,
+    "duration": 180,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "mondamusic-promo-promotional-showreel-music-512831.mp3",
+    "tempoBpm": 80,
+    "title": "Promotional Showreel",
+    "artist": "Monda Music",
+    "genre": "Electronic",
+    "subgenre": "Corporate",
+    "moods": [
+      "Modern",
+      "Bright"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 66,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "kulakovka-fashion-session-566503.mp3",
+    "tempoBpm": 123,
+    "title": "Fashion Session",
+    "artist": "Kulakovka",
+    "genre": "Electronic",
+    "subgenre": "House",
+    "moods": [
+      "Modern",
+      "Playful"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": false,
+    "duration": 162,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "mildrelaxation-believe-in-miracle-by-prabajithk-121041.mp3",
+    "tempoBpm": null,
+    "title": "Believe in Miracle",
+    "artist": "Prabajith K",
+    "genre": "Cinematic",
+    "subgenre": "Ambient",
+    "moods": [
+      "Emotional",
+      "Calm"
+    ],
+    "usage": "guide",
+    "energy": 3,
+    "vocals": false,
+    "duration": 122,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "jakob_welik-bla-bla-radio-edit-550257.mp3",
+    "tempoBpm": 150,
+    "title": "Bla Bla (Radio Edit)",
+    "artist": "Jakob Welik",
+    "genre": "Pop",
+    "subgenre": "Radio Edit",
+    "moods": [
+      "Playful",
+      "Bright"
+    ],
+    "usage": "ad",
+    "energy": 6,
+    "vocals": true,
+    "duration": 157,
+    "added": "2026-10-08"
+  },
+  {
+    "file": "jakob_welik-das-leuchtturmfest-am-ende-des-meeres-550256.mp3",
+    "tempoBpm": null,
+    "title": "Das Leuchtturmfest am Ende des Meeres",
+    "artist": "Jakob Welik",
+    "genre": "Pop",
+    "subgenre": "Song",
+    "moods": [
+      "Emotional",
+      "Warm"
+    ],
+    "usage": "ad",
+    "energy": 4,
+    "vocals": true,
+    "duration": 180,
+    "added": "2026-10-08"
   }
 ];
 
@@ -814,7 +1103,7 @@ export const pixabayMusic: MusicTrack[] = rows.map((row): MusicTrack => ({
   source: "Pixabay Music",
   sourceType: "pixabay",
   sourceUrl: "https://pixabay.com/music/",
-  audioUrl: `/music/${row.file}`,
+  audioUrl: `/api/music/${row.file}`,
   duration: row.duration,
   genre: row.genre,
   subgenre: row.subgenre,
@@ -838,6 +1127,6 @@ export const pixabayMusic: MusicTrack[] = rows.map((row): MusicTrack => ({
   licenseType: "Pixabay Content License (free commercial use)",
   attributionRequired: false,
   licenseUrl: "https://pixabay.com/service/license-summary/",
-  downloadedAt: "2026-10-05",
-  licenseCheckedAt: "2026-10-07",
+  downloadedAt: row.added ?? "2026-10-05",
+  licenseCheckedAt: row.added ?? "2026-10-07",
 }));

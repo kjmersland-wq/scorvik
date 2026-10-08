@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { estimateBeatGrid } from "../src/lib/audio/beats.ts";
 
-const dir = "public/music";
+const dir = "private/music";
 const result = {};
 for (const file of fs.readdirSync(dir).filter((name) => name.endsWith(".mp3"))) {
   const pcm = execFileSync("ffmpeg", ["-v", "error", "-i", `${dir}/${file}`, "-t", "90", "-ac", "1", "-ar", "22050", "-f", "f32le", "-"], { maxBuffer: 200 * 1024 * 1024 });

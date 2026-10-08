@@ -68,7 +68,7 @@ function trackFromFilename(filename: (typeof localMusicFiles)[number]): MusicTra
   const usage: "ad" | "guide" = usageToken === "guide" ? "guide" : "ad";
   const moodLabel = titleCase(mood);
   const usageLabel = usage === "ad" ? "Ad" : "Guide";
-  const path = `/music/${filename}`;
+  const path = `/api/music/${filename}`;
   return {
     id: filename.replace(/\.mp3$/, ""),
     title: `${moodLabel} ${tempo} ${usageLabel}${version ? ` ${version}` : ""}`,
@@ -141,7 +141,7 @@ export function isClearedRoyaltyFreeTrack(track: MusicTrack, platform: string): 
     && track.metadataStatus === "verified"
     && Boolean(track.licenseUrl)
     && Boolean(track.licenseCheckedAt)
-    && Boolean(track.audioUrl?.startsWith("/music/"))
+    && Boolean(track.audioUrl?.startsWith("/api/music/"))
     && track.allowedPlatforms.some((allowed) => platformsMatch(allowed, platform));
 }
 
@@ -157,7 +157,7 @@ function hasPreviewAsset(track: MusicTrack, platform: string): boolean {
   if (!track.audioUrl) return false;
   if (track.allowedPlatforms.length && !track.allowedPlatforms.some((allowed) => platformsMatch(allowed, platform))) return false;
   if (track.sourceType === "scorvik-original" || track.metadataStatus === "owner-supplied" || track.metadataStatus === "demo") {
-    return localMusicFiles.some((filename) => track.audioUrl === `/music/${filename}`);
+    return localMusicFiles.some((filename) => track.audioUrl === `/api/music/${filename}`);
   }
   return isClearedRoyaltyFreeTrack(track, platform) || track.sourceType === "pixabay";
 }

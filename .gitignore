@@ -42,3 +42,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# licensed music: never committed, served only through /api/music for signed-in users
+/private/
