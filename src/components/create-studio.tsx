@@ -10,6 +10,7 @@ import { saveProject } from "@/lib/projects";
 import { browserRenderSupported, renderProjectInBrowser } from "@/lib/render/browser-render";
 import { saveVideo } from "@/lib/video-store";
 import { VersionsPanel } from "@/components/versions-panel";
+import { PosterStudio, StudioTabs, type StudioTab } from "@/components/poster-studio";
 import { StockPicker } from "@/components/stock-picker";
 import { classifyIntent } from "@/lib/creative/intent";
 import { imageHasLettering } from "@/lib/render/lettering";
@@ -101,6 +102,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     }).catch(() => {});
   }, []);
   const [project, setProject] = useState<VideoProject | null>(null);
+  const [studioTab, setStudioTab] = useState<StudioTab>("film");
   const [renderPercent, setRenderPercent] = useState(0);
   const [renderError, setRenderError] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -394,6 +396,9 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
         {stage === "result" && <Link href={localizedPath(locale, "/projects")} className="button button-light button-small">{locale === "no" ? "Se utkastene" : "See my projects"} <span aria-hidden="true">↗</span></Link>}
       </div>
 
+      {analysis && <StudioTabs tab={studioTab} onChange={setStudioTab} locale={locale} />}
+      {analysis && studioTab === "posters" && <PosterStudio analysis={analysis} project={project} locale={locale} mode={filmMode} />}
+      <div style={{ display: analysis && studioTab === "posters" ? "none" : "contents" }}>
       {stage !== "website" && <div className="stepper" aria-label={locale === "no" ? "Fremdrift" : "Your progress"}>
         {stageNames.map((name, index) => <button key={name} className={index === stageIndex ? "active" : ""} onClick={() => { if (index < stageIndex && index < 2) setStage(index === 0 ? "website" : "storyboard"); }} aria-current={index === stageIndex ? "step" : undefined}><span className="stepper-num">{index < stageIndex ? "✓" : `0${index + 1}`}</span>{name}</button>)}
       </div>}
@@ -473,6 +478,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       </div>}
 
       {stage === "result" && project && <VersionsPanel project={project} locale={locale} />}
+      </div>
     </div>
   );
 }

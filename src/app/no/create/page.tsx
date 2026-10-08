@@ -13,5 +13,6 @@ export default async function NorwegianCreatePage({ searchParams }: CreatePagePr
   const duration = [15, 20, 30, 45, 60, 90, 120, 180].includes(durationValue) ? durationValue : undefined;
   const platform = typeof params.platform === "string" ? params.platform : undefined;
   const initialSettings: Partial<VideoSettings> = { format, duration, language: "Norsk", platformPresetIds: platform ? [platform] : undefined };
-    return <CreateStudio locale="no" initialSettings={initialSettings} />;
+  const initialUrl = typeof params.url === "string" ? params.url.slice(0, 2000) : undefined;
+  return <CreateStudio locale="no" initialUrl={initialUrl} initialSettings={initialSettings} />;
 }

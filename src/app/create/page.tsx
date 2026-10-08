@@ -15,5 +15,6 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
   const style = typeof params.style === "string" ? params.style : undefined;
   const platform = typeof params.platform === "string" ? params.platform : undefined;
   const initialSettings: Partial<VideoSettings> = { format, duration, language, style, platformPresetIds: platform ? [platform] : undefined };
-    return <CreateStudio initialSettings={initialSettings} />;
+  const initialUrl = typeof params.url === "string" ? params.url.slice(0, 2000) : undefined;
+  return <CreateStudio initialUrl={initialUrl} initialSettings={initialSettings} />;
 }

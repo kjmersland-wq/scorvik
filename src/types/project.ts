@@ -177,6 +177,63 @@ export interface PlatformPreset {
   captionBehavior: "burn-in" | "platform" | "optional";
 }
 
+export type PosterLayoutKind = "claim" | "price" | "steps";
+
+export interface PosterInsets { top: number; right: number; bottom: number; left: number }
+
+/** One exported poster size. All pixel values are exact; nothing is derived from percentages. */
+export interface PosterPlacement {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  safeInsets: PosterInsets;
+  fileStem: string;
+  usage: string;
+  /** share of the width that text may use, centred (0.8 keeps text inside the middle 80%) */
+  textColumn?: number;
+  /** smallest allowed brand-name size in pixels (thumbnails must read at phone size) */
+  minNamePx?: number;
+  dpi?: number;
+  /** also export this placement as a PDF */
+  pdf?: boolean;
+  /** rendered once from another placement's master and saved as a separate file */
+  sameMasterAs?: string;
+}
+
+/** Everything a poster is made of. Missing fields stay missing; nothing is invented to fill a slot. */
+export interface PosterBrief {
+  name: string;
+  /** one claim already on the page, at most 90 characters */
+  claim: string;
+  price?: string;
+  location?: string;
+  /** up to five brand colours; slot 0 is the page background when the site gave one */
+  palette: string[];
+  ink?: string;
+  logoUrl?: string;
+  heroUrl?: string;
+  category?: BrandProfile["category"];
+  host: string;
+  /** three numbered lines from headings already extracted (docs and how-to pages) */
+  steps: string[];
+  /** where the picture's subject sits, 0-1 each; centre when unset */
+  focal?: { x: number; y: number };
+  /** the page address says docs/help/guide */
+  docsHint: boolean;
+  /** posters made from a mock analysis are labelled Mock */
+  mock: boolean;
+}
+
+export interface PosterState {
+  claim: string;
+  price?: string;
+  layout: PosterLayoutKind;
+  updatedAt: string;
+  location?: string;
+  heroUrl?: string;
+}
+
 export interface AudioLayerSettings {
   volume: number;
   muted: boolean;
@@ -227,6 +284,8 @@ export interface VideoProject {
   version: number;
   creativeBrief?: CreativeBrief;
   renderJob?: RenderJob;
+  /** the poster pack's editable copy; the pictures are re-rendered locally from the saved analysis */
+  posters?: PosterState;
   platformVersions?: Array<{ presetId: string; scenes: StoryScene[]; status: "draft" | "rendering" | "complete" }>;
 }
 
