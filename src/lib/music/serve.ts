@@ -28,7 +28,7 @@ export async function streamMusic(name: string, rangeHeader: string | null): Pro
   if (!file) return new Response("Not found", { status: 404 });
   const full = path.join(musicDirectory, file);
   let size: number;
-  try { size = (await stat(full)).size; } catch { return new Response("Not found", { status: 404 }); }
+  try { size = (await stat(full)).size; } catch { return streamFromStorage(file, rangeHeader); }
   const headers: Record<string, string> = {
     "content-type": "audio/mpeg",
     "accept-ranges": "bytes",
@@ -44,4 +44,23 @@ export async function streamMusic(name: string, rangeHeader: string | null): Pro
     status: range ? 206 : 200,
     headers: { ...headers, "content-length": String(end - start + 1), ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}) },
   });
+}
+
+/**
+ * On a deployed copy the files are not in the repository. When MUSIC_SOURCE_URL points at private storage (optionally with
+ * MUSIC_SOURCE_TOKEN as a bearer token), the same route fetches the file from there and passes it on, so the storage itself
+ * never has to be public.
+ */
+async function streamFromStorage(file: string, rangeHeader: string | null): Promise<Response> {
+  const base = process.env.MUSIC_SOURCE_URL?.replace(/\/+$/, "");
+  if (!base || !/^https:\/\//.test(base)) return new Response("Not found", { status: 404 });
+  const token = process.env.MUSIC_SOURCE_TOKEN;
+  const upstream = await fetch(`${base}/${encodeURIComponent(file)}`, {
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(rangeHeader ? { range: rangeHeader } : {}) },
+    signal: AbortSignal.timeout(20_000),
+  }).catch(() => undefined);
+  if (!upstream || !(upstream.ok || upstream.status === 206) || !upstream.body) return new Response("Not found", { status: 404 });
+  const headers = new Headers({ "content-type": "audio/mpeg", "accept-ranges": "bytes", "cache-control": "private, max-age=3600", "content-disposition": "inline", "x-content-type-options": "nosniff" });
+  for (const name of ["content-length", "content-range"]) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
+  return new Response(upstream.body, { status: upstream.status, headers });
 }
