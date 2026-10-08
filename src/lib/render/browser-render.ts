@@ -817,7 +817,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const logo = await prepareLogo(project, width, height).catch(() => undefined);
   const finish = createFinish(ctx, width, height, project.settings.style === "Cinematic");
   const brand = project.analysis.brand || project.title;
-  const credits = (() => { const names = [...new Set(project.scenes.map((scene) => scene.credit).filter((value): value is string => Boolean(value)))]; return names.length ? `Photos: ${names.join(", ")}` : ""; })();
+  const credits = (() => { const names = [...new Set(project.scenes.map((scene) => scene.credit).filter((value): value is string => Boolean(value)))]; return names.length ? `${project.settings.language === "Norsk" ? "Foto" : "Photos"}: ${names.join(", ")}` : ""; })();
   const address = (() => { try { return new URL(project.analysis.url).hostname.replace(/^www\./, ""); } catch { return project.analysis.url; } })();
   // Beat-match: every cut lands on a bar line or beat of the chosen track, so scene lengths become whole beats and bars.
   const plainStarts: number[] = [];
@@ -832,7 +832,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   // Drawn scenes come from shapes, picture scenes from the loaded image; both fill the whole frame.
   const paint = (index: number, local: number, progress: number) => {
     const scene = timeline[index];
-    if (scene.graphic) drawGraphicScene(ctx, { graphic: scene.graphic, headline: scene.headline, typography: scene.typography }, local, scene.duration, progress, width, height, graphicStyle);
+    if (scene.graphic) drawGraphicScene(ctx, { graphic: scene.graphic, headline: scene.headline, typography: scene.typography }, local, scene.duration, progress, width, height, graphicStyle, { index, count: timeline.length });
     else drawScene(ctx, images[index], scene, index, progress, width, height);
   };
   // On a drawn scene the words the graphic already shows are not printed a second time underneath it.

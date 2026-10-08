@@ -1,6 +1,8 @@
 "use client";
 
+import { queryLadder } from "@/lib/stock/relevance";
 import { detectGraphic } from "@/lib/creative/graphics";
+import { isNorwegian } from "@/lib/creative/language";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createCreativeBrief, detectBrandProfile } from "@/lib/creative/create-brief";
@@ -56,6 +58,9 @@ interface CreateStudioProps {
   initialUrl?: string;
   initialSettings?: Partial<VideoSettings>;
 }
+
+// Library results below this score were not backed by their own tags or title and are left out in favour of the site's picture or a drawn scene.
+const minimumStockScore = 95;
 
 export function CreateStudio({ locale = "en", initialUrl = "", initialSettings = {} }: CreateStudioProps) {
   const text = getCopy(locale).create;
@@ -198,10 +203,13 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       const sourcesReady = autoFill && stockSources && (stockSources.pixabay || stockSources.pexels || stockSources.unsplash);
       // Claude rewrites the text first, so the pictures are searched for what each scene finally says
       void polishInBackground(nextScenes, nextAnalysis, copyTone, false, mode).then((merged) => { if (sourcesReady) void fillVisualsFromStock(merged); });
+      // A Norwegian page gets Norwegian wording and voice from the start, whichever language the studio is shown in.
+      const norwegian = locale === "no" || isNorwegian(nextAnalysis.language);
       setSettings((current) => ({
         ...current,
         duration: result.storyboard.totalDuration,
         musicTrackId: result.music[0]?.track?.id ?? null,
+        ...(norwegian ? { language: "Norsk", voice: text.voices.no[0] } : {}),
       }));
       setDurationWasChosen(true);
       setStage("storyboard");
@@ -280,17 +288,16 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
       if (lettered) swapped += 1;
       try {
         let item: StockItem | undefined;
-        if (useVideo && clips < 3) {
-          const response = await fetch(`/api/stock?q=${encodeURIComponent(scene.visualQuery)}&kind=video&lang=en`);
-          const data = await response.json() as { items?: StockItem[] };
-          item = data.items?.find((candidate) => candidate.width >= candidate.height && !used.has(candidate.url));
-          if (item) clips += 1;
-        }
-        if (!item) {
-          const response = await fetch(`/api/stock?q=${encodeURIComponent(scene.visualQuery)}&kind=image&lang=en`);
-          const data = await response.json() as { items?: StockItem[] };
-          item = data.items?.find((candidate) => candidate.width >= candidate.height && !used.has(candidate.url));
-          if (item) pictures += 1;
+        // Walk from the full phrase to shorter ones, and only take a result the library text actually supports.
+        for (const query of queryLadder(scene.visualQuery)) {
+          const pick = async (kind: "video" | "image") => {
+            const response = await fetch(`/api/stock?q=${encodeURIComponent(query)}&kind=${kind}&lang=en`);
+            const data = await response.json() as { items?: StockItem[] };
+            return data.items?.find((candidate) => candidate.width >= candidate.height && candidate.score >= minimumStockScore && !used.has(candidate.url));
+          };
+          if (useVideo && clips < 3) { item = await pick("video"); if (item) { clips += 1; break; } }
+          item = await pick("image");
+          if (item) { pictures += 1; break; }
         }
         if (item) { used.add(item.url); pickStock(scene.id, item); }
       } catch {

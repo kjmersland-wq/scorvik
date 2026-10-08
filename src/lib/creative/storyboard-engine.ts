@@ -4,6 +4,7 @@ import { appealScore, overlaps } from "./key-points.ts";
 import { fitDurations, readingSeconds } from "./timing.ts";
 import { visualQueryFor } from "./visual-queries.ts";
 import { detectGraphic } from "./graphics.ts";
+import { isNorwegian } from "./language.ts";
 import type { CreativeBrief, ScenePurpose, SiteAnalysis, StoryScene, Storyboard } from "@/types/project";
 import type { FilmMode } from "@/types/project";
 
@@ -192,7 +193,7 @@ export function buildStoryboard(
   const selected = selectPlans(pool, count, mode);
   const leftOut = pool.filter((plan) => !selected.includes(plan) && appealScore(`${plan.headline} ${plan.supportingText}`) >= 3).sort((left, right) => appealScore(`${right.headline} ${right.supportingText}`) - appealScore(`${left.headline} ${left.supportingText}`)).map((plan) => plan.headline).slice(0, 6);
   // Scorvik's copy voice (see copy-voice.ts): soft questions at the open and close, one message per scene.
-  const language = /^n[bo]?/i.test(analysis.language ?? "") ? "no" : (options.locale ?? "en");
+  const language = isNorwegian(analysis.language) ? "no" : (options.locale ?? "en");
   const seed = analysis.brand || analysis.title;
   const plans = selected.map((plan, index) => {
     if (mode === "instruction" && extractedSteps.length >= 2 && extractedSteps.length <= 8 && index === 0 && plan.purpose === "Story" && sameSourceText(plan.headline, brief.suggestedHook)) {

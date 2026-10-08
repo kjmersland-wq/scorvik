@@ -202,23 +202,48 @@ function drawType(ctx: CanvasRenderingContext2D, text: string, emphasis: string[
       wordNumber += 1;
     });
   });
-  // the line along the foot: a gentle wave with a ring that glides along it
-  const baseY = height * (portrait ? 0.8 : 0.84);
-  const amplitude = short * 0.035;
-  const wave = (x: number) => baseY + Math.sin((x / width) * Math.PI * 3 + 0.6) * amplitude;
-  const reveal = ease(local / 0.9) * fadeOut;
+}
+
+/**
+ * The line that runs under every drawn scene: one wave across the film with a dot for each scene.
+ * It is drawn up to where the film has got to, so it keeps travelling from scene to scene.
+ */
+function drawJourney(ctx: CanvasRenderingContext2D, journey: { index: number; count: number }, progress: number, local: number, width: number, height: number, style: GraphicStyle) {
+  const { index, count } = journey;
+  if (count < 2) return;
+  const short = Math.min(width, height);
+  const portrait = height > width;
+  const baseY = height * (portrait ? 0.915 : 0.955);
+  const amplitude = short * 0.02;
+  const left = width * 0.06;
+  const span = width * 0.88;
+  const at = (t: number) => ({ x: left + span * t, y: baseY + Math.sin(t * Math.PI * 4 + 0.6) * amplitude });
+  const reached = Math.min(1, (index + clamp(progress)) / (count - 1));
+  const startFrom = index / (count - 1);
   ctx.save();
-  ctx.globalAlpha = reveal;
-  ctx.strokeStyle = rgba(style.accent, 0.85);
   ctx.lineWidth = Math.max(2.5, short * 0.005);
+  ctx.lineCap = "round";
+  // the whole route, faint
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
   ctx.beginPath();
-  for (let x = 0; x <= width * reveal; x += 8) { if (x === 0) ctx.moveTo(x, wave(x)); else ctx.lineTo(x, wave(x)); }
+  for (let step = 0; step <= 120; step += 1) { const point = at(step / 120); if (step === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y); }
   ctx.stroke();
-  const ringX = width * ((local * 0.12) % 1) * reveal;
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  // the part already travelled; on the scene's first moments it grows out of the previous dot
+  const drawn = Math.min(reached, startFrom + (1 / (count - 1)) * ease(local / 0.9));
+  ctx.strokeStyle = style.accent;
   ctx.beginPath();
-  ctx.arc(ringX, wave(ringX), Math.max(6, short * 0.01), 0, Math.PI * 2);
+  for (let step = 0; step <= 120; step += 1) { const t = (step / 120) * drawn; const point = at(t); if (step === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y); }
   ctx.stroke();
+  // a dot for every scene; passed ones filled, the current one ringed
+  for (let n = 0; n < count; n += 1) {
+    const t = n / (count - 1);
+    const point = at(t);
+    const radius = Math.max(5, short * 0.009);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    if (t <= drawn + 1e-6) { ctx.fillStyle = style.accent; ctx.fill(); } else { ctx.fillStyle = "#0b1119"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.stroke(); }
+    if (n === index) { ctx.beginPath(); ctx.arc(point.x, point.y, radius * 2.1, 0, Math.PI * 2); ctx.strokeStyle = rgba(style.accent, 0.8); ctx.stroke(); }
+  }
   ctx.restore();
 }
 
@@ -231,6 +256,7 @@ export function drawGraphicScene(
   width: number,
   height: number,
   style: GraphicStyle,
+  journey?: { index: number; count: number },
 ) {
   background(ctx, width, height, progress, style);
   ctx.save();
@@ -239,6 +265,7 @@ export function drawGraphicScene(
   if (graphic.kind === "choices") drawChoices(ctx, graphic, local, width, height, style);
   else if (graphic.kind === "route") drawRoute(ctx, graphic, local, width, height, style);
   else drawType(ctx, scene.headline, scene.typography?.emphasis ?? [], local, duration, width, height, style);
+  if (journey) drawJourney(ctx, journey, progress, local, width, height, style);
   ctx.restore();
 }
 
