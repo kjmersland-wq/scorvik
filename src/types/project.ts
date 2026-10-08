@@ -16,6 +16,12 @@ export interface WebsiteSource {
   mode: "real" | "mock";
 }
 
+/** A drawn scene (no photo): the film explains the product with animated shapes built from the site's own words. */
+export type SceneGraphic =
+  | { kind: "choices"; items: string[]; selected: number }
+  | { kind: "route"; from: string; to: string; fromLabel: string; toLabel: string }
+  | { kind: "type" };
+
 export interface StoryScene {
   id: string;
   order?: number;
@@ -36,6 +42,8 @@ export interface StoryScene {
   videoUrl?: string;
   /** photographer credit shown on the end card when the source requires it (Unsplash) */
   credit?: string;
+  /** when set the scene is drawn from shapes instead of a picture */
+  graphic?: SceneGraphic;
   visualSource?: "website-image" | "open-graph" | "not-detected";
   cta?: string;
   musicCue?: string;

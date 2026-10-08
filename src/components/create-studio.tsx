@@ -1,5 +1,6 @@
 "use client";
 
+import { detectGraphic } from "@/lib/creative/graphics";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createCreativeBrief, detectBrandProfile } from "@/lib/creative/create-brief";
@@ -271,7 +272,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     let swapped = 0;
     const used = new Set<string>();
     for (const scene of list) {
-      if (!scene.visualQuery) continue;
+      if (!scene.visualQuery || scene.graphic) continue;
       // A picture with its own big lettering never gets our text on top: it is swapped for library footage.
       const lettered = Boolean(scene.visual) && !scene.videoUrl && await imageHasLettering(scene.visual, analysis?.url ?? "");
       if (scene.purpose === "CTA" && !lettered) continue;
@@ -302,8 +303,8 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
 
   function pickStock(id: string, item: StockItem) {
     changeScene(id, item.kind === "video"
-      ? { visual: item.previewUrl || item.url, videoUrl: item.url, visualSource: "not-detected", credit: item.source === "pexels" ? `${item.credit} / Pexels` : undefined }
-      : { visual: item.url, videoUrl: undefined, visualSource: "not-detected", credit: item.source === "unsplash" || item.source === "pexels" ? `${item.credit} / ${item.source === "unsplash" ? "Unsplash" : "Pexels"}` : undefined });
+      ? { graphic: undefined, visual: item.previewUrl || item.url, videoUrl: item.url, visualSource: "not-detected", credit: item.source === "pexels" ? `${item.credit} / Pexels` : undefined }
+      : { graphic: undefined, visual: item.url, videoUrl: undefined, visualSource: "not-detected", credit: item.source === "unsplash" || item.source === "pexels" ? `${item.credit} / ${item.source === "unsplash" ? "Unsplash" : "Pexels"}` : undefined });
     if (item.downloadLocation) void fetch("/api/stock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ downloadLocation: item.downloadLocation }) }).catch(() => {});
     setStockScene(null);
   }
@@ -312,7 +313,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
     setScenes((current) => current.map((scene) => {
       if (scene.id !== id) return scene;
       const nextIndex = (visualChoices.indexOf(scene.visual) + 1) % visualChoices.length;
-      return { ...scene, visual: visualChoices[nextIndex] };
+      return { ...scene, graphic: undefined, visual: visualChoices[nextIndex] };
     }));
   }
 
@@ -432,7 +433,7 @@ export function CreateStudio({ locale = "en", initialUrl = "", initialSettings =
           <div className="scene-list">{scenes.map((scene, index) => <article className="scene-row" key={scene.id}>
             <div className="scene-art" style={{ backgroundImage: `linear-gradient(0deg,#15231a44,transparent),url("${scene.visual}")` }} aria-label={locale === "no" ? `Bilde for scene ${index + 1}` : `Visual for scene ${index + 1}`} />
             <div className="scene-copy"><div className="scene-topline"><b>{String(index + 1).padStart(2, "0")}</b><select aria-label={locale === "no" ? `Hva scene ${index + 1} viser` : `What scene ${index + 1} shows`} value={scene.purpose} onChange={(event) => changeScene(scene.id, { purpose: event.target.value as ScenePurpose })}>{purposes.map((purpose) => <option key={purpose} value={purpose}>{purposeLabels[purpose]}</option>)}</select></div>
-              {editingScene === scene.id ? <><input className="field-control" aria-label={text.wordsOnScreen} value={scene.headline} onChange={(event) => changeScene(scene.id, { headline: event.target.value })}/><input className="field-control" aria-label={text.moreDetail} value={scene.supportingText} onChange={(event) => changeScene(scene.id, { supportingText: event.target.value })}/><textarea className="text-control" aria-label={text.wordsToSay} value={scene.voiceover} onChange={(event) => changeScene(scene.id, { voiceover: event.target.value })}/><div className="scene-edit-options"><label>{text.connectScenes}<select aria-label={text.connectScenes} value={scene.transition} onChange={(event) => changeScene(scene.id, { transition: event.target.value })}>{transitions.map((transition) => <option key={transition}>{transition}</option>)}</select></label><button className="button button-light button-small" onClick={() => changeVisual(scene.id)}>{text.tryImage} ↻</button><button className="button button-light button-small" type="button" onClick={() => setStockScene(stockScene === scene.id ? null : scene.id)}>{locale === "no" ? "Arkiv: bilder og video" : "Library: pictures and video"}</button></div>{stockScene === scene.id && <StockPicker locale={locale} initialQuery={scene.visualQuery ?? suggestQuery(scene)} onPick={(item) => pickStock(scene.id, item)} onClose={() => setStockScene(null)} />}<button className="text-link scene-done" onClick={() => setEditingScene(null)}>{text.saveChanges}</button></> : <><h4>{scene.headline}</h4>{showTextOnScreen && <p>{scene.supportingText}</p>}<p>{scene.voiceover}</p><button className="text-link scene-edit" onClick={() => setEditingScene(scene.id)}>{text.changeScene}</button></>}
+              {editingScene === scene.id ? <><input className="field-control" aria-label={text.wordsOnScreen} value={scene.headline} onChange={(event) => changeScene(scene.id, { headline: event.target.value })}/><input className="field-control" aria-label={text.moreDetail} value={scene.supportingText} onChange={(event) => changeScene(scene.id, { supportingText: event.target.value })}/><textarea className="text-control" aria-label={text.wordsToSay} value={scene.voiceover} onChange={(event) => changeScene(scene.id, { voiceover: event.target.value })}/><div className="scene-edit-options"><label>{text.connectScenes}<select aria-label={text.connectScenes} value={scene.transition} onChange={(event) => changeScene(scene.id, { transition: event.target.value })}>{transitions.map((transition) => <option key={transition}>{transition}</option>)}</select></label><button className="button button-light button-small" onClick={() => changeVisual(scene.id)}>{text.tryImage} ↻</button><button className="button button-light button-small" type="button" onClick={() => changeScene(scene.id, { graphic: scene.graphic ? undefined : detectGraphic(scene.headline, scene.supportingText) ?? { kind: "type" } })}>{scene.graphic ? (locale === "no" ? "Bruk bilde" : "Use a picture") : (locale === "no" ? "Tegn scenen" : "Draw this scene")}</button><button className="button button-light button-small" type="button" onClick={() => setStockScene(stockScene === scene.id ? null : scene.id)}>{locale === "no" ? "Arkiv: bilder og video" : "Library: pictures and video"}</button></div>{stockScene === scene.id && <StockPicker locale={locale} initialQuery={scene.visualQuery ?? suggestQuery(scene)} onPick={(item) => pickStock(scene.id, item)} onClose={() => setStockScene(null)} />}<button className="text-link scene-done" onClick={() => setEditingScene(null)}>{text.saveChanges}</button></> : <><h4>{scene.headline}</h4>{showTextOnScreen && <p>{scene.supportingText}</p>}<p>{scene.voiceover}</p><button className="text-link scene-edit" onClick={() => setEditingScene(scene.id)}>{text.changeScene}</button></>}
             </div>
             <div className="scene-controls"><div><button title={locale === "no" ? "Flytt scenen opp" : "Move scene up"} aria-label={locale === "no" ? "Flytt scenen opp" : "Move scene up"} onClick={() => moveScene(index, -1)}>↑</button><button title={locale === "no" ? "Flytt scenen ned" : "Move scene down"} aria-label={locale === "no" ? "Flytt scenen ned" : "Move scene down"} onClick={() => moveScene(index, 1)}>↓</button></div><select aria-label={locale === "no" ? `Lengde på scene ${index + 1}` : `Duration of scene ${index + 1}`} value={scene.duration} onChange={(event) => changeScene(scene.id, { duration: Number(event.target.value) })}>{[3,4,5,6,7,8,10,12,15,20,25,30].map((duration) => <option key={duration} value={duration}>{duration} {text.seconds}</option>)}</select><div><button title={locale === "no" ? "Kopier scenen" : "Duplicate scene"} aria-label={locale === "no" ? "Kopier scenen" : "Duplicate scene"} onClick={() => { const duplicate = { ...scene, id: crypto.randomUUID() }; setScenes((current) => [...current.slice(0, index + 1), duplicate, ...current.slice(index + 1)]); }}>⧉</button><button title={locale === "no" ? "Fjern scenen" : "Remove scene"} aria-label={locale === "no" ? "Fjern scenen" : "Remove scene"} onClick={() => setScenes((current) => current.filter((item) => item.id !== scene.id))}>×</button></div></div>
           </article>)}</div>

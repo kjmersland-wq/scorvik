@@ -3,6 +3,8 @@ import { fitMusicToVideo } from "@/lib/audio/mix";
 import { integratedLoudness } from "@/lib/audio/loudness";
 import { estimateBeatGrid, snapToBeats, type BeatGrid } from "@/lib/audio/beats";
 import { pickAccent } from "@/lib/creative/captions";
+import { detectGraphic } from "@/lib/creative/graphics";
+import { drawGraphicScene } from "./graphics";
 import { chooseTextPlacement, edgeFraction, type TextLayout } from "./busyness";
 import { libraryMusic } from "@/lib/music/recommend";
 import type { StoryScene, VideoFormat, VideoProject } from "@/types/project";
@@ -54,6 +56,13 @@ const usable = (bitmap: ImageBitmap) => shortestSide(bitmap) >= 300 && bitmap.wi
 
 // Picks the best picture for every scene: the scene's own (name-matched) image when it is good enough,
 // otherwise the sharpest unused picture from the site, and only then a repeat.
+function placeholderCanvas() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  return canvas;
+}
+
 async function loadSceneImages(project: VideoProject, width: number, height: number, signal?: AbortSignal): Promise<Visual[]> {
   const logos = new Set(project.analysis.logoCandidates ?? []);
   const cache = new Map<string, ImageBitmap | undefined>();
@@ -61,11 +70,13 @@ async function loadSceneImages(project: VideoProject, width: number, height: num
     if (!cache.has(url)) cache.set(url, await loadBitmap(url, project.analysis.url));
     return cache.get(url);
   };
-  const chosen: Array<{ url: string; bitmap: ImageBitmap } | undefined> = [];
+  // null marks a drawn scene (no picture needed)
+  const chosen: Array<{ url: string; bitmap: ImageBitmap } | undefined | null> = [];
   const clips = new Map<number, { video: HTMLVideoElement; poster: ImageBitmap }>();
   const used = new Set<string>();
   for (const [index, scene] of project.scenes.entries()) {
     throwIfAborted(signal);
+    if (scene.graphic) { chosen.push(null); continue; }
     if (scene.videoUrl) {
       const clip = await loadVideoClip(scene.videoUrl);
       if (clip) { clips.set(index, clip); chosen.push({ url: scene.videoUrl, bitmap: clip.poster }); used.add(scene.videoUrl); continue; }
@@ -73,7 +84,7 @@ async function loadSceneImages(project: VideoProject, width: number, height: num
     const own = scene.visual ? await get(scene.visual) : undefined;
     if (own && usable(own) && !used.has(scene.visual)) { chosen.push({ url: scene.visual, bitmap: own }); used.add(scene.visual); } else chosen.push(undefined);
   }
-  if (chosen.some((entry) => !entry)) {
+  if (chosen.some((entry) => entry === undefined)) {
     const pool = [...new Set([project.analysis.openGraphImage, ...(project.analysis.images ?? []), project.analysis.image, project.thumbnailUrl].filter((value): value is string => Boolean(value) && !logos.has(value as string)))].slice(0, 14);
     for (let start = 0; start < pool.length; start += 4) {
       throwIfAborted(signal);
@@ -83,7 +94,7 @@ async function loadSceneImages(project: VideoProject, width: number, height: num
       .sort((left, right) => shortestSide(right.bitmap) - shortestSide(left.bitmap));
     const fallbackAny = pool.map((url) => ({ url, bitmap: cache.get(url) })).filter((entry): entry is { url: string; bitmap: ImageBitmap } => Boolean(entry.bitmap));
     for (const [index, entry] of chosen.entries()) {
-      if (entry) continue;
+      if (entry !== undefined) continue;
       const fresh = ranked.find((candidate) => !used.has(candidate.url));
       const pick = fresh ?? ranked[index % Math.max(1, ranked.length)] ?? fallbackAny[0];
       if (!pick) throw new Error(`Scene ${index + 1} has no image that could be loaded.`);
@@ -95,7 +106,8 @@ async function loadSceneImages(project: VideoProject, width: number, height: num
   const result: Visual[] = [];
   const enhance = project.settings.enhanceImages !== false;
   for (const [index, entry] of chosen.entries()) {
-    const bitmap = entry!.bitmap;
+    if (!entry) { result.push({ image: await createImageBitmap(placeholderCanvas()) }); continue; }
+    const bitmap = entry.bitmap;
     const clip = clips.get(index);
     if (clip) { result.push({ ...(await prepareVisual(bitmap, width, height, { enhance: false, trim: false })), video: clip.video }); continue; }
     let visual = visuals.get(bitmap);
@@ -816,6 +828,19 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
   const timeline = scenes.map((scene, index) => ({ ...scene, duration: (starts[index + 1] ?? totalDuration) - starts[index] }));
   const frames = Math.round(totalDuration * frameRate);
   const layouts: Array<TextLayout | undefined> = [];
+  const graphicStyle = { accent: accentColor, family: textFamily, headlineFamily };
+  // Drawn scenes come from shapes, picture scenes from the loaded image; both fill the whole frame.
+  const paint = (index: number, local: number, progress: number) => {
+    const scene = timeline[index];
+    if (scene.graphic) drawGraphicScene(ctx, { graphic: scene.graphic, headline: scene.headline, typography: scene.typography }, local, scene.duration, progress, width, height, graphicStyle);
+    else drawScene(ctx, images[index], scene, index, progress, width, height);
+  };
+  // On a drawn scene the words the graphic already shows are not printed a second time underneath it.
+  const captionFor = (scene: StoryScene): StoryScene | undefined => {
+    if (!scene.graphic) return scene;
+    if (scene.graphic.kind === "type") return undefined;
+    return detectGraphic(scene.headline, "") ? { ...scene, headline: scene.supportingText, supportingText: "" } : { ...scene, supportingText: "" };
+  };
 
   try {
     let current = 0;
@@ -829,7 +854,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       ctx.globalAlpha = 1;
       const currentClip = images[current].video;
       if (currentClip) await seekVideo(currentClip, local);
-      drawScene(ctx, images[current], scene, current, local / scene.duration, width, height);
+      paint(current, local, local / scene.duration);
       if (!layouts[current] && local >= 0.1) layouts[current] = analyseLayout(ctx, width, height);
       const untilEnd = scene.duration - local;
       if (current < timeline.length - 1 && untilEnd < crossfade) {
@@ -840,7 +865,7 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
         if (nextClip) await seekVideo(nextClip, 0);
         ctx.save();
         ctx.translate((1 - blend) * width * 0.03, 0); // the incoming shot glides in, soft and directional
-        drawScene(ctx, images[next], timeline[next], next, 0, width, height);
+        paint(next, 0, 0);
         ctx.restore();
         ctx.globalAlpha = 1;
       }
@@ -851,7 +876,8 @@ export async function renderProjectInBrowser(project: VideoProject, onProgress: 
       const endAmount = isLast ? ease((local - (scene.duration - cardWindow)) / 0.5) : 0;
       const introLength = Math.min(3, totalDuration * 0.2);
       const introAmount = current === 0 ? ease(local / 0.5) * (1 - ease((local - (introLength - 0.7)) / 0.7)) : 0;
-      if (showText) drawText(ctx, scene, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount), layouts[current] ?? { top: 0, bottom: 0 });
+      const caption = captionFor(scene);
+      if (showText && caption) drawText(ctx, caption, width, height, current === 0 ? Math.max(0, local - introLength + 0.6) : local, current === 0 ? scene.duration - introLength + 0.6 : scene.duration, finish.letterbox, Math.max(endAmount, introAmount), layouts[current] ?? { top: 0, bottom: 0 });
       drawIntro(ctx, logo, brand, width, height, introAmount, current === 0 ? local / introLength : 0);
       drawEndCard(ctx, logo, brand, address, credits, width, height, endAmount, isLast ? 0.5 + 0.5 * Math.sin(local * 2.4) : 0);
       // First frame is already readable (never pure black); the picture is up within 0.4 s and the film only fades in the last 0.4 s.

@@ -3,6 +3,7 @@ import { closingQuestion, focusHeadline, introQuestion } from "./copy-voice.ts";
 import { appealScore, overlaps } from "./key-points.ts";
 import { fitDurations, readingSeconds } from "./timing.ts";
 import { visualQueryFor } from "./visual-queries.ts";
+import { detectGraphic } from "./graphics.ts";
 import type { CreativeBrief, ScenePurpose, SiteAnalysis, StoryScene, Storyboard } from "@/types/project";
 import type { FilmMode } from "@/types/project";
 
@@ -221,6 +222,8 @@ export function buildStoryboard(
     const noOverlay = !matched && (looksLikeName(plan.headline) || identifiesPerson(image ? alts[image] : undefined));
     const openGraphImage = analysis.openGraphImage || analysis.image;
     const visual = image || openGraphImage || "";
+    // A choice list or a "from X to Y" in the scene's own words is drawn as shapes; a scene with no picture at all becomes a type card.
+    const graphic = detectGraphic(caption.headline, caption.supportingText) ?? (visual ? undefined : { kind: "type" as const });
     return {
       id: idFactory(),
       order: index,
@@ -231,6 +234,7 @@ export function buildStoryboard(
       typography: { emphasis: highlightKeywords(caption.headline, language, 2) },
       visualQuery: visualQueryFor(plan.purpose, analysis, mode, `${caption.headline} ${caption.supportingText} ${plan.voiceover}`),
       ...(noOverlay ? { noOverlay: true } : {}),
+      ...(graphic ? { graphic } : {}),
       voiceover: plan.voiceover,
       transition: options.locale === "no"
         ? index === 0 ? "Rolig åpning" : index === plans.length - 1 ? "Fade ut" : "Mykt klipp"
